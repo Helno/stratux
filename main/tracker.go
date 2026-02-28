@@ -377,7 +377,7 @@ func (tracker *SoftRF) isDetected() bool {
 }
 
 func (tracker *SoftRF) isConfigRead() bool {
-	return len(tracker.settings) >= 5 // need at least or 5 main settings: acft type, id method and id, as well as nmea1/2 mode
+	return len(tracker.settings) >= 6 // need acft type, id method, id, nmea1/2 mode, and gdl90_in
 }
 
 func (tracker *SoftRF) writeReadDelay() time.Duration {
@@ -401,6 +401,13 @@ func (tracker *SoftRF) writeInitialConfig(serialPort *serial.Port) bool {
 		serialPort.Write([]byte(msg))
 		changed = true
 	}
+	// Auto-configure GDL90 input from Stratux (UDP port 4000)
+	if tracker.settings["gdl90_in"] != "2" {
+		msg := appendNmeaChecksum("$PSRFS,0,gdl90_in,2") + "\r\n"
+		log.Printf("Configure SoftRF: enable GDL90 input from Stratux: %s", msg)
+		serialPort.Write([]byte(msg))
+		changed = true
+	}
 	if changed {
 		serialPort.Write([]byte(appendNmeaChecksum("$PSRFC,SAV") + "\r\n"))
 	}
@@ -413,6 +420,7 @@ func (tracker *SoftRF) requestTrackerConfig(serialPort *serial.Port) {
 	serialPort.Write([]byte(appendNmeaChecksum("$PSRFS,0,acft_type,?") + "\r\n"))
 	serialPort.Write([]byte(appendNmeaChecksum("$PSRFS,0,aircraft_id,?") + "\r\n"))
 	serialPort.Write([]byte(appendNmeaChecksum("$PSRFS,0,id_method,?") + "\r\n"))
+	serialPort.Write([]byte(appendNmeaChecksum("$PSRFS,0,gdl90_in,?") + "\r\n"))
 }
 
 func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
