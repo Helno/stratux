@@ -541,11 +541,11 @@ func writeUblox8ConfigCommands(p *serial.Port) {
 
 	// UBX-CFG-NAVX5 - Enable AssistNow Autonomous (AOP)
 	navx5 := make([]byte, 40)
-    navx5[0] = 0x02
-    navx5[2] = 0x00
-    navx5[3] = 0x40
-    navx5[27] = 0x01 // aopCfg: enable AssistNow Autonomous
-    p.Write(makeUBXCFG(0x06, 0x23, 40, navx5))
+	navx5[0] = 0x02
+	navx5[2] = 0x00
+	navx5[3] = 0x40
+	navx5[27] = 0x01 // aopCfg: enable AssistNow Autonomous
+	p.Write(makeUBXCFG(0x06, 0x23, 40, navx5))
 }
 
 func writeUblox9ConfigCommands(p *serial.Port) {
@@ -567,11 +567,11 @@ func writeUblox9ConfigCommands(p *serial.Port) {
 
 	// UBX-CFG-NAVX5: enable AssistNow Autonomous (AOP)
 	navx5 := make([]byte, 40)
-    navx5[0] = 0x02
-    navx5[2] = 0x00
-    navx5[3] = 0x40
-    navx5[27] = 0x01 // aopCfg: enable AssistNow Autonomous
-    p.Write(makeUBXCFG(0x06, 0x23, 40, navx5))
+	navx5[0] = 0x02
+	navx5[2] = 0x00
+	navx5[3] = 0x40
+	navx5[27] = 0x01 // aopCfg: enable AssistNow Autonomous
+	p.Write(makeUBXCFG(0x06, 0x23, 40, navx5))
 }
 
 func writeUbloxGenericCommands(navrate uint16, p *serial.Port) {
