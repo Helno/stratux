@@ -333,6 +333,54 @@ func (tracker *SoftRF) initNewConnection(serialPort *serial.Port) {
 	tracker.settings = make(map[string]string)
 }
 
+func softRFProtocolSettingFromWire(v int) int {
+	switch v {
+	case 0, 6:
+		return 0 // Legacy
+	case 7:
+		return 6 // Latest
+	default:
+		return v
+	}
+}
+
+func softRFProtocolWireFromSetting(v int) int {
+	switch v {
+	case 0:
+		return 6 // Legacy
+	case 6:
+		return 7 // Latest
+	default:
+		return v
+	}
+}
+
+func softRFAltProtocolSettingFromWire(v int) int {
+	switch v {
+	case 0, 255:
+		return -1 // None
+	case 6:
+		return 0 // Legacy
+	case 7:
+		return 6 // Latest
+	default:
+		return v
+	}
+}
+
+func softRFAltProtocolWireFromSetting(v int) int {
+	switch v {
+	case -1:
+		return 0 // None
+	case 0:
+		return 6 // Legacy
+	case 6:
+		return 7 // Latest
+	default:
+		return v
+	}
+}
+
 
 func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 	if nmea[0] == "PSRFH" {
@@ -358,14 +406,11 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 		} else if key == "aircraft_id" {
 			globalSettings.OGNAddr = value
 		} else if key == "protocol" {
-			globalSettings.SoftRFProtocol, _ = strconv.Atoi(value)
+			v, _ := strconv.Atoi(value)
+			globalSettings.SoftRFProtocol = softRFProtocolSettingFromWire(v)
 		} else if key == "altprotocol" {
 			v, _ := strconv.Atoi(value)
-			if v == 0 || v == 255 {
-				globalSettings.SoftRFAltProtocol = -1 // 0/255 mean "none" in SoftRF
-			} else {
-				globalSettings.SoftRFAltProtocol = v
-			}
+			globalSettings.SoftRFAltProtocol = softRFAltProtocolSettingFromWire(v)
 		} else if key == "band" {
 			globalSettings.SoftRFBand, _ = strconv.Atoi(value)
 		} else if key == "alarm" {
@@ -483,16 +528,13 @@ func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
 
 	// RF protocol
 	if globalSettings.SoftRFProtocol >= 0 {
-		proto := strconv.Itoa(globalSettings.SoftRFProtocol)
+		proto := strconv.Itoa(softRFProtocolWireFromSetting(globalSettings.SoftRFProtocol))
 		if s, ok := tracker.settings["protocol"]; !ok || proto != s {
 			messages = append(messages, appendNmeaChecksum("$PSRFS,0,protocol," + proto) + "\r\n")
 		}
 	}
 	if globalSettings.SoftRFAltProtocol >= -1 {
-		altProto := "0"
-		if globalSettings.SoftRFAltProtocol >= 0 {
-			altProto = strconv.Itoa(globalSettings.SoftRFAltProtocol)
-		}
+		altProto := strconv.Itoa(softRFAltProtocolWireFromSetting(globalSettings.SoftRFAltProtocol))
 		currentAltProto := tracker.settings["altprotocol"]
 		if currentAltProto == "255" {
 			currentAltProto = "0"
@@ -549,8 +591,6 @@ func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
 	
 	return len(messages) > 0
 }
-
-
 
 
 

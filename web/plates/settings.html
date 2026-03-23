@@ -152,11 +152,12 @@
                                 <label class="control-label col-xs-5">Primary Protocol</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFProtocol" ng-change="updateSoftRFCompatProtocols()">
                                     <option ng-if="!softRFConfigReady" value="-1">Reading from tracker...</option>
-                                    <option value="0">Legacy (FLARM)</option>
                                     <option value="1">OGNTP</option>
+                                    <option value="2">P3I (PilotAware)</option>
+                                    <option value="5">FANET (Skytraxx)</option>
+                                    <option value="0">Legacy (FLARM)</option>
                                     <option value="6">Latest (FLARM v7)</option>
                                     <option value="8">ADS-L</option>
-                                    <option value="5">FANET (Skytraxx)</option>
                                 </select>
                             </div>
 
