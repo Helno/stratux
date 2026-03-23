@@ -151,6 +151,7 @@
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">Primary Protocol</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFProtocol" ng-change="updateSoftRFCompatProtocols()">
+                                    <option ng-if="!softRFConfigReady" value="-1">Reading from tracker...</option>
                                     <option value="0">Legacy (FLARM)</option>
                                     <option value="1">OGNTP</option>
                                     <option value="6">Latest (FLARM v7)</option>
@@ -163,6 +164,7 @@
                             <div class="form-group reset-flow" ng-show="softRFCompatSecondary.length > 0">
                                 <label class="control-label col-xs-5">Secondary Protocol</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFAltProtocol">
+                                    <option ng-if="!softRFConfigReady" value="-2">Reading from tracker...</option>
                                     <option value="-1">None</option>
                                     <option ng-repeat="p in softRFCompatSecondary" value="{{p.value}}">{{p.label}}</option>
                                 </select>
@@ -172,6 +174,7 @@
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">Frequency Band</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFBand">
+                                    <option ng-if="!softRFConfigReady" value="-1">Reading from tracker...</option>
                                     <option value="1">EU — 868 MHz</option>
                                     <option value="2">US/CA — 915 MHz</option>
                                     <option value="3">AU — 921 MHz</option>
@@ -187,6 +190,7 @@
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">Alarm Level</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFAlarm">
+                                    <option ng-if="!softRFConfigReady" value="-1">Reading from tracker...</option>
                                     <option value="0">None</option>
                                     <option value="1">Distance-based</option>
                                     <option value="2">Vector (recommended)</option>
@@ -198,6 +202,7 @@
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">Relay Mode</label>
                                 <select class="col-xs-7 custom-select" ng-model="SoftRFRelay">
+                                    <option ng-if="!softRFConfigReady" value="-1">Reading from tracker...</option>
                                     <option value="0">Off</option>
                                     <option value="1">When landed</option>
                                     <option value="2">All traffic</option>
@@ -225,7 +230,8 @@
                         <!-- End SoftRF-specific settings -->
 
                         <div class="form-group reset-flow">
-                            <button class="btn btn-primary btn-block" ng-click="updateOgnTrackerConfig()">Configure Tracker</button>
+                            <button class="btn btn-primary btn-block" ng-click="updateOgnTrackerConfig()" ng-disabled="gpsHardwareCode==13 && !softRFConfigReady">Configure Tracker</button>
+                            <div class="help-block" ng-show="gpsHardwareCode==13 && !softRFConfigReady">Waiting for SoftRF settings readback before applying changes.</div>
                         </div>
                     </form>
                 </div>
