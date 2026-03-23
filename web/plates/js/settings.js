@@ -724,11 +724,12 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 
 	// SoftRF protocol compatibility map: primary -> valid secondaries
 	var softRFCompatMap = {
-		"0": [{value:"6",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
-		"1": [{value:"6",label:"Latest (FLARM v7)"}],
+		"0": [{value:"6",label:"Latest (FLARM v7)"}],
+		"1": [{value:"6",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
+		"2": [],
+		"5": [],
 		"6": [{value:"0",label:"Legacy (FLARM)"},{value:"1",label:"OGNTP"},{value:"8",label:"ADS-L"}],
-		"8": [{value:"6",label:"Latest (FLARM v7)"}],
-		"5": []
+		"8": [{value:"1",label:"OGNTP"},{value:"6",label:"Latest (FLARM v7)"}]
 	};
 	$scope.updateSoftRFCompatProtocols = function() {
 		var primary = $scope.SoftRFProtocol;
