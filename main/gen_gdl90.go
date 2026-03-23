@@ -1245,11 +1245,11 @@ type settings struct {
 	OGNTxPower           int
 
 	// SoftRF-specific settings (only used when GPS_TYPE_SOFTRF is active)
-	SoftRFProtocol    int  // 0=Legacy, 1=OGNTP, 5=FANET, 6=Latest, 8=ADS-L
-	SoftRFAltProtocol int  // -1=none, or a valid secondary protocol value
-	SoftRFBand        int  // 1=EU 868MHz, 2=US 915MHz, 3=AU 921MHz, 4=NZ 869MHz, 5=RU 868MHz, 7=UK 869MHz
-	SoftRFAlarm       int  // 0=none, 1=distance, 2=vector, 3=legacy
-	SoftRFRelay       int  // 0=off, 1=when landed, 2=all, 3=relay-only
+	SoftRFProtocol    int  // -1=unknown, 0=Legacy, 1=OGNTP, 5=FANET, 6=Latest, 8=ADS-L
+	SoftRFAltProtocol int  // -2=unknown, -1=none, or a valid secondary protocol value
+	SoftRFBand        int  // -1=unknown, 1=EU 868MHz, 2=US 915MHz, 3=AU 921MHz, 4=NZ 869MHz, 5=RU 868MHz, 7=UK 869MHz
+	SoftRFAlarm       int  // -1=unknown, 0=none, 1=distance, 2=vector, 3=legacy
+	SoftRFRelay       int  // -1=unknown, 0=off, 1=when landed, 2=all, 3=relay-only
 	SoftRFStealth     bool
 	SoftRFNoTrack     bool
 
@@ -1344,6 +1344,11 @@ func defaultSettings() {
 	globalSettings.GPS_Enabled = true
 	globalSettings.IMU_Sensor_Enabled = true
 	globalSettings.BMP_Sensor_Enabled = true
+	globalSettings.SoftRFProtocol = -1
+	globalSettings.SoftRFAltProtocol = -2
+	globalSettings.SoftRFBand = -1
+	globalSettings.SoftRFAlarm = -1
+	globalSettings.SoftRFRelay = -1
 	//FIXME: Need to change format below.
 	globalSettings.NetworkOutputs = []networkConnection{
 		{Conn: nil, Ip: "", Port: 4000, Capability: NETWORK_GDL90_STANDARD | NETWORK_AHRS_GDL90},
@@ -1895,4 +1900,3 @@ func main() {
 		select {}
 	}
 }
-

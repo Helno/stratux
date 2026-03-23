@@ -344,14 +344,15 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.OGNTxPower = settings.OGNTxPower;
 
 		// SoftRF-specific settings
-		$scope.SoftRFProtocol = (settings.SoftRFProtocol || 0).toString();
-		$scope.SoftRFAltProtocol = (settings.SoftRFAltProtocol !== undefined ? settings.SoftRFAltProtocol : -1).toString();
-		$scope.SoftRFBand = (settings.SoftRFBand || 1).toString();
-		$scope.SoftRFAlarm = (settings.SoftRFAlarm || 0).toString();
-		$scope.SoftRFRelay = (settings.SoftRFRelay || 0).toString();
+		$scope.SoftRFProtocol = (settings.SoftRFProtocol !== undefined ? settings.SoftRFProtocol : -1).toString();
+		$scope.SoftRFAltProtocol = (settings.SoftRFAltProtocol !== undefined ? settings.SoftRFAltProtocol : -2).toString();
+		$scope.SoftRFBand = (settings.SoftRFBand !== undefined ? settings.SoftRFBand : -1).toString();
+		$scope.SoftRFAlarm = (settings.SoftRFAlarm !== undefined ? settings.SoftRFAlarm : -1).toString();
+		$scope.SoftRFRelay = (settings.SoftRFRelay !== undefined ? settings.SoftRFRelay : -1).toString();
 		$scope.SoftRFStealth = settings.SoftRFStealth || false;
 		$scope.SoftRFNoTrack = settings.SoftRFNoTrack || false;
 		$scope.softRFCompatSecondary = [];
+		$scope.softRFConfigReady = false;
 		$scope.updateSoftRFCompatProtocols();
 
 		$scope.PWMDutyMin = settings.PWMDutyMin;
@@ -731,9 +732,14 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 	};
 	$scope.updateSoftRFCompatProtocols = function() {
 		var primary = $scope.SoftRFProtocol;
+		$scope.softRFConfigReady = primary !== "-1" && $scope.SoftRFAltProtocol !== "-2" && $scope.SoftRFBand !== "-1" && $scope.SoftRFAlarm !== "-1" && $scope.SoftRFRelay !== "-1";
+		if (!$scope.softRFConfigReady) {
+			$scope.softRFCompatSecondary = [];
+			return;
+		}
 		$scope.softRFCompatSecondary = softRFCompatMap[primary] || [];
 		// Reset alt protocol if no longer compatible
-		var stillValid = $scope.softRFCompatSecondary.some(function(p) {
+		var stillValid = $scope.SoftRFAltProtocol === "-1" || $scope.softRFCompatSecondary.some(function(p) {
 			return p.value === $scope.SoftRFAltProtocol;
 		});
 		if (!stillValid) { $scope.SoftRFAltProtocol = "-1"; }
