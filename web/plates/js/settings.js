@@ -342,6 +342,15 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.OGNPilot = settings.OGNPilot;
 		$scope.OGNReg = settings.OGNReg;
 		$scope.OGNTxPower = settings.OGNTxPower;
+		$scope.SoftRFProtocol = (settings.SoftRFProtocol > 0 ? settings.SoftRFProtocol : 7).toString();
+		$scope.SoftRFAltProtocol = (settings.SoftRFAltProtocol >= 0 ? settings.SoftRFAltProtocol : 0).toString();
+		$scope.SoftRFBand = (settings.SoftRFBand > 0 ? settings.SoftRFBand : defaultSoftRFBand(settings.RegionSelected)).toString();
+		$scope.SoftRFAlarm = (settings.SoftRFAlarm >= 0 ? settings.SoftRFAlarm : 3).toString();
+		$scope.SoftRFRelay = (settings.SoftRFRelay >= 0 ? settings.SoftRFRelay : 0).toString();
+		$scope.SoftRFStealth = settings.SoftRFStealth || false;
+		$scope.SoftRFNoTrack = settings.SoftRFNoTrack || false;
+		$scope.softRFCompatSecondary = [];
+		$scope.updateSoftRFCompatProtocols();
 
 		$scope.PWMDutyMin = settings.PWMDutyMin;
 
@@ -710,6 +719,37 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		return "???";
 	}
 
+	function defaultSoftRFBand(regionSelected) {
+		switch (parseInt(regionSelected)) {
+			case 1: return 2;
+			case 2: return 1;
+			default: return 1;
+		}
+	}
+
+	var softRFCompatMap = {
+		"1": [{value:"6",label:"Legacy (FLARM v6)"},{value:"7",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
+		"2": [{value:"7",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
+		"5": [{value:"7",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
+		"6": [{value:"1",label:"OGNTP"},{value:"7",label:"Latest (FLARM v7)"},{value:"8",label:"ADS-L"}],
+		"7": [{value:"1",label:"OGNTP"},{value:"2",label:"P3I (PilotAware)"},{value:"5",label:"FANET"},{value:"6",label:"Legacy (FLARM v6)"},{value:"8",label:"ADS-L"}],
+		"8": [{value:"1",label:"OGNTP"},{value:"2",label:"P3I (PilotAware)"},{value:"5",label:"FANET"},{value:"6",label:"Legacy (FLARM v6)"},{value:"7",label:"Latest (FLARM v7)"}]
+	};
+
+	$scope.updateSoftRFCompatProtocols = function() {
+		var primary = $scope.SoftRFProtocol;
+		$scope.softRFCompatSecondary = softRFCompatMap[primary] || [];
+		var stillValid = $scope.SoftRFAltProtocol === "0";
+		if (!stillValid) {
+			stillValid = $scope.softRFCompatSecondary.some(function(p) {
+				return p.value === $scope.SoftRFAltProtocol;
+			});
+		}
+		if (!stillValid) {
+			$scope.SoftRFAltProtocol = "0";
+		}
+	}
+
 	$scope.updateOgnTrackerConfig = function(action) {
 		var newsettings = {
 			"OGNAddrType": parseInt($scope.OGNAddrType),
@@ -719,6 +759,15 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			"OGNReg": $scope.OGNReg,
 			"OGNTxPower": $scope.OGNTxPower
 		};
+		if (parseInt($scope.gpsHardwareCode) === 13) {
+			newsettings.SoftRFProtocol = parseInt($scope.SoftRFProtocol);
+			newsettings.SoftRFAltProtocol = parseInt($scope.SoftRFAltProtocol);
+			newsettings.SoftRFBand = parseInt($scope.SoftRFBand);
+			newsettings.SoftRFAlarm = parseInt($scope.SoftRFAlarm);
+			newsettings.SoftRFRelay = parseInt($scope.SoftRFRelay);
+			newsettings.SoftRFStealth = $scope.SoftRFStealth;
+			newsettings.SoftRFNoTrack = $scope.SoftRFNoTrack;
+		}
 		setSettings(angular.toJson(newsettings));
 
 		// reload settings after a short time, to check if OGN tracker actually accepted the settings

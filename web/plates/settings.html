@@ -88,18 +88,19 @@
                     <form name="OGNTrackerSettings" novalidate>
                         <!-- Address Type -->
                         <div class="form-group reset-flow">
-                            <label class="control-label col-xs-5">Tracker Address Type</label>
+                            <label class="control-label col-xs-5">{{gpsHardwareCode==13 ? 'ID Type' : 'Tracker Address Type'}}</label>
                             <select class="col-xs-7 custom-select" ng-model="OGNAddrType">
                                 <option value="0" ng-selected="OGNAddrType=='0'" ng-hide="gpsHardwareCode==15">Random</option>
                                 <option value="1" ng-selected="OGNAddrType=='1'">ICAO</option>
-                                <option value="2" ng-selected="OGNAddrType=='2'">Flarm</option>
-                                <option value="3" ng-selected="OGNAddrType=='3'" ng-hide="gpsHardwareCode==13 || gpsHardwareCode==15">OGN</option>
+                                <option value="2" ng-selected="OGNAddrType=='2'">{{gpsHardwareCode==13 ? 'Device' : 'Flarm'}}</option>
+                                <option value="3" ng-selected="OGNAddrType=='3'" ng-hide="gpsHardwareCode==15">{{gpsHardwareCode==13 ? 'Anonymous' : 'OGN'}}</option>
+                                <option value="7" ng-selected="OGNAddrType=='7'" ng-show="gpsHardwareCode==13">Override device ID</option>
                             </select>
                         </div>
 
                         <!-- Address -->
-                        <div class="form-group reset-flow" ng-hide="gpsHardwareCode==13 && OGNAddrType != '1'">
-                            <label class="control-label col-xs-5">Tracker Address (Hex)</label>
+                        <div class="form-group reset-flow" ng-hide="gpsHardwareCode==13 && OGNAddrType != '1' && OGNAddrType != '7'">
+                            <label class="control-label col-xs-5">{{gpsHardwareCode==13 ? 'Aircraft ID (Hex)' : 'Tracker Address (Hex)'}}</label>
                             <input class="col-xs-7" type="text" maxlength="6" hex-input ng-model="OGNAddr" />
                         </div>
 
@@ -111,8 +112,8 @@
                                 <option value="1" ng-selected="OGNAcftType=='1'">Glider/Motorglider</option>
                                 <option value="2" ng-selected="OGNAcftType=='2'" ng-hide="gpsHardwareCode==15">Tow plane</option>
                                 <option value="3" ng-selected="OGNAcftType=='3'">Helicopter</option>
-                                <option value="4" ng-selected="OGNAcftType=='4'" ng-hide="gpsHardwareCode==13 || gpsHardwareCode==15">Parachute</option>
-                                <option value="5" ng-selected="OGNAcftType=='5'" ng-hide="gpsHardwareCode==13 || gpsHardwareCode==15">Drop plane</option>
+                                <option value="4" ng-selected="OGNAcftType=='4'" ng-hide="gpsHardwareCode==15">Parachute</option>
+                                <option value="5" ng-selected="OGNAcftType=='5'" ng-hide="gpsHardwareCode==15">Drop plane</option>
                                 <option value="6" ng-selected="OGNAcftType=='6'">Hang glider</option>
                                 <option value="7" ng-selected="OGNAcftType=='7'">Para glider</option>
                                 <option value="8" ng-selected="OGNAcftType=='8'">Powered Aircraft</option>
@@ -121,7 +122,7 @@
                                 <option value="11" ng-selected="OGNAcftType=='11'">Balloon</option>
                                 <option value="12" ng-selected="OGNAcftType=='12'" ng-hide="gpsHardwareCode==13 || gpsHardwareCode==15">Airship</option>
                                 <option value="13" ng-selected="OGNAcftType=='13'">UAV</option>
-                                <option value="14" ng-selected="OGNAcftType=='14'" ng-hide="gpsHardwareCode==15">Ground support</option>
+                                <option value="14" ng-selected="OGNAcftType=='14'" ng-hide="gpsHardwareCode==15">{{gpsHardwareCode==13 ? 'Ground support / Winch' : 'Ground support'}}</option>
                                 <option value="15" ng-selected="OGNAcftType=='15'" ng-hide="gpsHardwareCode==15">Static object</option>
                             </select>
                         </div>
@@ -140,6 +141,80 @@
                         <div class="form-group reset-flow" ng-hide="gpsHardwareCode==13 || gpsHardwareCode==15">
                             <label class="control-label col-xs-5">Transmit Power (dBm)<br/><small>-32 = no transmission, actual power depends on hardware</small></label>
                             <input class="col-xs-7" type="number" min="-32" max="31" ng-model="OGNTxPower" />
+                        </div>
+
+                        <div ng-show="gpsHardwareCode==13">
+                            <div class="panel-heading" style="margin-top:10px; margin-bottom:6px; font-weight:bold; font-size:13px; color:#555;">SoftRF</div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">RF Protocol</label>
+                                <select class="col-xs-7 custom-select" ng-model="SoftRFProtocol" ng-change="updateSoftRFCompatProtocols()">
+                                    <option value="7">Latest (FLARM v7)</option>
+                                    <option value="6">Legacy (FLARM v6)</option>
+                                    <option value="1">OGNTP</option>
+                                    <option value="2">P3I (PilotAware)</option>
+                                    <option value="5">FANET</option>
+                                    <option value="8">ADS-L</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group reset-flow" ng-show="softRFCompatSecondary.length > 0">
+                                <label class="control-label col-xs-5">Alternate Protocol</label>
+                                <select class="col-xs-7 custom-select" ng-model="SoftRFAltProtocol">
+                                    <option value="0">None</option>
+                                    <option ng-repeat="p in softRFCompatSecondary" value="{{p.value}}">{{p.label}}</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">RF Band</label>
+                                <select class="col-xs-7 custom-select" ng-model="SoftRFBand">
+                                    <option value="1">EU (868.2 MHz)</option>
+                                    <option value="2">US (915 MHz)</option>
+                                    <option value="3">AU (921 MHz)</option>
+                                    <option value="4">NZ (869.250 MHz)</option>
+                                    <option value="5">RU (868.8 MHz)</option>
+                                    <option value="6">CN (470 MHz)</option>
+                                    <option value="7">UK</option>
+                                    <option value="8">IN (866.0 MHz)</option>
+                                    <option value="9">IL (916.2 MHz)</option>
+                                    <option value="10">KR (920.9 MHz)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">Alarm Trigger</label>
+                                <select class="col-xs-7 custom-select" ng-model="SoftRFAlarm">
+                                    <option value="3">Latest</option>
+                                    <option value="2">Vector</option>
+                                    <option value="1">Distance</option>
+                                    <option value="0">None</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">Relay Mode</label>
+                                <select class="col-xs-7 custom-select" ng-model="SoftRFRelay">
+                                    <option value="0">Off</option>
+                                    <option value="1">Landed</option>
+                                    <option value="2">All</option>
+                                    <option value="3">Relay only</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">Stealth</label>
+                                <div class="col-xs-5">
+                                    <ui-switch ng-model='SoftRFStealth'></ui-switch>
+                                </div>
+                            </div>
+
+                            <div class="form-group reset-flow">
+                                <label class="control-label col-xs-5">No track</label>
+                                <div class="col-xs-5">
+                                    <ui-switch ng-model='SoftRFNoTrack'></ui-switch>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-group reset-flow">

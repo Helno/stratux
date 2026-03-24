@@ -1243,6 +1243,13 @@ type settings struct {
 	OGNPilot             string
 	OGNReg               string
 	OGNTxPower           int
+	SoftRFProtocol       int            // 1=OGNTP, 2=P3I, 5=FANET, 6=Legacy, 7=Latest, 8=ADS-L (-1 while unread)
+	SoftRFAltProtocol    int            // 0=none, or a valid secondary protocol value (-1 while unread)
+	SoftRFBand           int            // 1=EU, 2=US, 3=AU, 4=NZ, 5=RU, 6=CN, 7=UK, 8=IN, 9=IL, 10=KR (-1 while unread)
+	SoftRFAlarm          int            // 0=none, 1=distance, 2=vector, 3=latest (-1 while unread)
+	SoftRFRelay          int            // 0=off, 1=landed, 2=all, 3=relay-only (-1 while unread)
+	SoftRFStealth        bool
+	SoftRFNoTrack        bool
 
 	PWMDutyMin           int
 
@@ -1335,6 +1342,11 @@ func defaultSettings() {
 	globalSettings.GPS_Enabled = true
 	globalSettings.IMU_Sensor_Enabled = true
 	globalSettings.BMP_Sensor_Enabled = true
+	globalSettings.SoftRFProtocol = -1
+	globalSettings.SoftRFAltProtocol = -1
+	globalSettings.SoftRFBand = -1
+	globalSettings.SoftRFAlarm = -1
+	globalSettings.SoftRFRelay = -1
 	//FIXME: Need to change format below.
 	globalSettings.NetworkOutputs = []networkConnection{
 		{Conn: nil, Ip: "", Port: 4000, Capability: NETWORK_GDL90_STANDARD | NETWORK_AHRS_GDL90},
@@ -1886,4 +1898,3 @@ func main() {
 		select {}
 	}
 }
-
