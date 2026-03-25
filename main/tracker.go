@@ -22,41 +22,41 @@ import (
 	TODO: SoftRF dongle is not yet considered a tracker, since we use the Moshe-Braner SoftRF fork
 */
 
-var typeMappingOgn2Gx = [][]int {
-	{1, 4}, // (Motor)glider
-	{8, 5}, // Powered
-	{3, 6}, // Helicopter
-	{6, 2}, // Hang glider
-	{7, 1}, // Paraglider
+var typeMappingOgn2Gx = [][]int{
+	{1, 4},  // (Motor)glider
+	{8, 5},  // Powered
+	{3, 6},  // Helicopter
+	{6, 2},  // Hang glider
+	{7, 1},  // Paraglider
 	{11, 3}, // Balloon
 	{13, 7}, // UAV
 
-	{2, 5}, // Tow->Powered
-	{4, 1}, // Parachute->Paraglider
-	{5, 5}, // Drop plane->Powered
-	{9, 5}, // Jet -> Powered
+	{2, 5},  // Tow->Powered
+	{4, 1},  // Parachute->Paraglider
+	{5, 5},  // Drop plane->Powered
+	{9, 5},  // Jet -> Powered
 	{10, 0}, // Ufo -> Other
 	{12, 3}, // Airship -> Balloon
 	{14, 0}, // Ground support
 	{15, 0}, // Static object
 }
 
-var typeMappingOgn2SoftRF = [][]int {
-	{1, 1}, // (Motor)glider
-	{2, 2}, // Tow
-	{3, 3}, // Helicopter
-	{6, 6}, // Hang glider
-	{7, 7}, // Paraglider
-	{8, 8}, // Powered
+var typeMappingOgn2SoftRF = [][]int{
+	{1, 1},   // (Motor)glider
+	{2, 2},   // Tow
+	{3, 3},   // Helicopter
+	{6, 6},   // Hang glider
+	{7, 7},   // Paraglider
+	{8, 8},   // Powered
 	{11, 11}, // Balloon
 	{13, 13}, // UAV
 	{14, 16}, // Ground support/winch
 	{15, 15}, // Static object
 
-	{4, 7}, // Parachute->Paraglider
-	{5, 8}, // Drop plane->Powered
-	{9, 8}, // Jet -> Powered
-	{10, 8}, // Ufo -> Powered
+	{4, 7},   // Parachute->Paraglider
+	{5, 8},   // Drop plane->Powered
+	{9, 8},   // Jet -> Powered
+	{10, 8},  // Ufo -> Powered
 	{12, 11}, // Airship -> Balloon
 }
 
@@ -66,6 +66,9 @@ var softRFRequiredConfigKeys = []string{
 	"acft_type",
 	"aircraft_id",
 	"id_method",
+}
+
+var softRFExtendedConfigKeys = []string{
 	"protocol",
 	"altprotocol",
 	"band",
@@ -89,8 +92,6 @@ func mapAircraftType(mapping [][]int, forward bool, acType int) int {
 	}
 	return -1
 }
-
-
 
 // Main interface that all tracker implementations need to implement
 type Tracker interface {
@@ -117,14 +118,13 @@ func formatOgnTrackerConfigString() string {
 	return msg + "\r\n"
 }
 
-
 type OgnTracker struct {
-	detected bool
+	detected      bool
 	trackerConfig []string
 }
 
 type GxAirCom struct {
-	detected bool
+	detected      bool
 	trackerConfig []string
 	// If we suspect GX, but don't know for sure, we send exactly one blind config request. If it responds, we know. Otherwise, we stop.
 	blindAskedForConfig bool
@@ -158,19 +158,19 @@ func (tracker *OgnTracker) onNmea(serialPort *serial.Port, nmea []string) bool {
 		log.Printf("Received OGN Tracker configuration: " + strings.Join(nmea, ","))
 		oldAddr := globalSettings.OGNAddr
 		for i := 1; i < len(nmea); i++ {
-			kv := strings.SplitN(nmea[i], "=", 2);
+			kv := strings.SplitN(nmea[i], "=", 2)
 			if len(kv) < 2 {
 				continue
 			}
 
 			if kv[0] == "Address" {
-				addr, _ :=  strconv.ParseUint(kv[1], 0, 32)
+				addr, _ := strconv.ParseUint(kv[1], 0, 32)
 				globalSettings.OGNAddr = strings.ToUpper(fmt.Sprintf("%x", addr))
 			} else if kv[0] == "AddrType" {
-				addrtype, _ :=  strconv.ParseInt(kv[1], 0, 8)
+				addrtype, _ := strconv.ParseInt(kv[1], 0, 8)
 				globalSettings.OGNAddrType = int(addrtype)
 			} else if kv[0] == "AcftType" {
-				acfttype, _ :=  strconv.ParseInt(kv[1], 0, 8)
+				acfttype, _ := strconv.ParseInt(kv[1], 0, 8)
 				globalSettings.OGNAcftType = int(acfttype)
 			} else if kv[0] == "Pilot" {
 				globalSettings.OGNPilot = kv[1]
@@ -200,7 +200,7 @@ func (tracker *OgnTracker) gpsTimeOffsetPps() time.Duration {
 
 func (tracker *OgnTracker) getGpsHardwareType() uint {
 	return GPS_TYPE_OGNTRACKER
-	
+
 }
 func (tracker *OgnTracker) isDetected() bool {
 	return tracker.detected
@@ -241,13 +241,12 @@ func (tracker *GxAirCom) initNewConnection(serialPort *serial.Port) {
 	tracker.blindAskedForConfig = false
 }
 
-
 func (tracker *GxAirCom) onNmea(serialPort *serial.Port, nmea []string) bool {
-    // Only sent by GxAirCom tracker. We use this to detect that GxAirCom tracker is connected and configure it as needed
-    if (nmea[0] == "PFLAV" && nmea[4] == "GXAircom") {
+	// Only sent by GxAirCom tracker. We use this to detect that GxAirCom tracker is connected and configure it as needed
+	if nmea[0] == "PFLAV" && nmea[4] == "GXAircom" {
 		tracker.detected = true
-        return true
-    }
+		return true
+	}
 	if nmea[0] == "LK8EX1" && !tracker.blindAskedForConfig {
 		// Indicates potentially GxAirCom.. send a blind tracker config request. If it responds, we know for sure
 		tracker.blindAskedForConfig = true
@@ -256,17 +255,17 @@ func (tracker *GxAirCom) onNmea(serialPort *serial.Port, nmea []string) bool {
 	}
 
 	if nmea[0] == "PGXCF" && nmea[1] == "1" {
-		// $PGXCF,<version>,<Output Serial>,<eMode>,<eOutputVario>,<output Fanet>,<output GPS>,<output FLARM>,<customGPSConfig>,<Aircraft Type (hex)>,<Address Type>,<Address (hex)>,<Pilot Name> 
+		// $PGXCF,<version>,<Output Serial>,<eMode>,<eOutputVario>,<output Fanet>,<output GPS>,<output FLARM>,<customGPSConfig>,<Aircraft Type (hex)>,<Address Type>,<Address (hex)>,<Pilot Name>
 		//  0      1         2               3       4              5            6              7                 8                     9              10              11             12
 		log.Printf("Received GxAirCom Tracker configuration: " + strings.Join(nmea, ","))
 		tracker.detected = true
 		tracker.trackerConfig = nmea
 
-		GXAcftType,_ := strconv.ParseInt(nmea[9], 16, 0)
+		GXAcftType, _ := strconv.ParseInt(nmea[9], 16, 0)
 		acftType := mapAircraftType(typeMappingOgn2Gx, false, int(GXAcftType))
 		globalSettings.OGNAcftType = acftType
 
-		GXAddrType,_ := strconv.Atoi(nmea[10])
+		GXAddrType, _ := strconv.Atoi(nmea[10])
 		globalSettings.OGNAddrType = GXAddrType
 		globalSettings.OGNAddr = nmea[11]
 		globalSettings.OGNPilot = nmea[12]
@@ -283,7 +282,7 @@ func (tracker *GxAirCom) gpsTimeOffsetPps() time.Duration {
 
 func (tracker *GxAirCom) getGpsHardwareType() uint {
 	return GPS_TYPE_GXAIRCOM
-	
+
 }
 func (tracker *GxAirCom) isDetected() bool {
 	return tracker.detected
@@ -298,7 +297,7 @@ func (tracker *GxAirCom) writeReadDelay() time.Duration {
 }
 
 func (tracker *GxAirCom) writeInitialConfig(serialPort *serial.Port) bool {
-	if (tracker.trackerConfig[2] != "1" || tracker.trackerConfig[5] == "0" || tracker.trackerConfig[6] == "0" || tracker.trackerConfig[7] == "0" || tracker.trackerConfig[8] == "0") {
+	if tracker.trackerConfig[2] != "1" || tracker.trackerConfig[5] == "0" || tracker.trackerConfig[6] == "0" || tracker.trackerConfig[7] == "0" || tracker.trackerConfig[8] == "0" {
 		tracker.writeConfigFromSettings(serialPort) // force correct settings
 		return true
 	} else {
@@ -320,18 +319,17 @@ func (tracker *GxAirCom) writeConfigFromSettings(serialPort *serial.Port) bool {
 
 	acftType := mapAircraftType(typeMappingOgn2Gx, true, globalSettings.OGNAcftType)
 
-
-	// $PGXCF,<version>,<Output Serial>,<eMode>,<eOutputVario>,<output Fanet>,<output GPS>,<output FLARM>,<customGPSConfig>,<Aircraft Type (hex)>,<Address Type>,<Address (hex)>,<Pilot Name> 
+	// $PGXCF,<version>,<Output Serial>,<eMode>,<eOutputVario>,<output Fanet>,<output GPS>,<output FLARM>,<customGPSConfig>,<Aircraft Type (hex)>,<Address Type>,<Address (hex)>,<Pilot Name>
 	//  0      1         2               3              4              5            6              7                 8                     9              10              11      12
 	requiredSentence := fmt.Sprintf("$PGXCF,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
-		1,  // PGXCF Version
-		1,  // Serial out
-		0,  // Airmode
-		1,  // Vario disabled // 0=noVario, 1= LK8EX1, 2=LXPW, we use it to try to identify GxAirCom
-		1,  // Fanet
-		1,  // GPS
-		1,  // Flarm
-		1,  // Stratux NMEA
+		1, // PGXCF Version
+		1, // Serial out
+		0, // Airmode
+		1, // Vario disabled // 0=noVario, 1= LK8EX1, 2=LXPW, we use it to try to identify GxAirCom
+		1, // Fanet
+		1, // GPS
+		1, // Flarm
+		1, // Stratux NMEA
 		acftType,
 		addrType,
 		globalSettings.OGNAddr,
@@ -348,6 +346,44 @@ func (tracker *SoftRF) initNewConnection(serialPort *serial.Port) {
 	tracker.settings = make(map[string]string)
 }
 
+func (tracker *SoftRF) applyExtendedConfigToGlobalSettings() {
+	for _, key := range softRFExtendedConfigKeys {
+		if _, ok := tracker.settings[key]; !ok {
+			return
+		}
+	}
+
+	protocol, err := strconv.Atoi(tracker.settings["protocol"])
+	if err != nil || protocol <= 0 {
+		log.Printf("Ignoring SoftRF extended config snapshot with invalid protocol=%q", tracker.settings["protocol"])
+		return
+	}
+	altProtocol, err := strconv.Atoi(tracker.settings["altprotocol"])
+	if err != nil {
+		return
+	}
+	band, err := strconv.Atoi(tracker.settings["band"])
+	if err != nil || band <= 0 {
+		log.Printf("Ignoring SoftRF extended config snapshot with invalid band=%q", tracker.settings["band"])
+		return
+	}
+	alarm, err := strconv.Atoi(tracker.settings["alarm"])
+	if err != nil {
+		return
+	}
+	relay, err := strconv.Atoi(tracker.settings["relay"])
+	if err != nil {
+		return
+	}
+
+	globalSettings.SoftRFProtocol = protocol
+	globalSettings.SoftRFAltProtocol = altProtocol
+	globalSettings.SoftRFBand = band
+	globalSettings.SoftRFAlarm = alarm
+	globalSettings.SoftRFRelay = relay
+	globalSettings.SoftRFStealth = tracker.settings["stealth"] == "1"
+	globalSettings.SoftRFNoTrack = tracker.settings["no_track"] == "1"
+}
 
 func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 	if nmea[0] == "PSRFH" {
@@ -372,21 +408,8 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 			globalSettings.OGNAddrType, _ = strconv.Atoi(value)
 		} else if key == "aircraft_id" {
 			globalSettings.OGNAddr = value
-		} else if key == "protocol" {
-			globalSettings.SoftRFProtocol, _ = strconv.Atoi(value)
-		} else if key == "altprotocol" {
-			globalSettings.SoftRFAltProtocol, _ = strconv.Atoi(value)
-		} else if key == "band" {
-			globalSettings.SoftRFBand, _ = strconv.Atoi(value)
-		} else if key == "alarm" {
-			globalSettings.SoftRFAlarm, _ = strconv.Atoi(value)
-		} else if key == "relay" {
-			globalSettings.SoftRFRelay, _ = strconv.Atoi(value)
-		} else if key == "stealth" {
-			globalSettings.SoftRFStealth = value == "1"
-		} else if key == "no_track" {
-			globalSettings.SoftRFNoTrack = value == "1"
 		}
+		tracker.applyExtendedConfigToGlobalSettings()
 		return true
 	}
 
@@ -399,7 +422,7 @@ func (tracker *SoftRF) gpsTimeOffsetPps() time.Duration {
 
 func (tracker *SoftRF) getGpsHardwareType() uint {
 	return GPS_TYPE_SOFTRF
-	
+
 }
 func (tracker *SoftRF) isDetected() bool {
 	return tracker.detected
@@ -448,7 +471,7 @@ func (tracker *SoftRF) writeInitialConfig(serialPort *serial.Port) bool {
 		log.Printf("SoftRF: auto-set band to %d from RegionSelected=%d", globalSettings.SoftRFBand, globalSettings.RegionSelected)
 	}
 	if globalSettings.SoftRFBand > 0 && (!haveDeviceBand || strconv.Itoa(globalSettings.SoftRFBand) != deviceBand) {
-		msg := appendNmeaChecksum("$PSRFS,0,band," + strconv.Itoa(globalSettings.SoftRFBand)) + "\r\n"
+		msg := appendNmeaChecksum("$PSRFS,0,band,"+strconv.Itoa(globalSettings.SoftRFBand)) + "\r\n"
 		log.Printf("Configure SoftRF band: %s", msg)
 		serialPort.Write([]byte(msg))
 		changed = true
@@ -486,42 +509,42 @@ func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
 	var messages []string
 
 	if s, ok := tracker.settings["acft_type"]; !ok || acType != s {
-		messages = append(messages, appendNmeaChecksum("$PSRFS,0,acft_type," + acType) + "\r\n")
+		messages = append(messages, appendNmeaChecksum("$PSRFS,0,acft_type,"+acType)+"\r\n")
 	}
 	if s, ok := tracker.settings["id_method"]; !ok || addrType != s {
-		messages = append(messages, appendNmeaChecksum("$PSRFS,0,id_method," + addrType) + "\r\n")
+		messages = append(messages, appendNmeaChecksum("$PSRFS,0,id_method,"+addrType)+"\r\n")
 	}
 	if s, ok := tracker.settings["aircraft_id"]; !ok || addr != s {
-		messages = append(messages, appendNmeaChecksum("$PSRFS,0,aircraft_id," + addr) + "\r\n")
+		messages = append(messages, appendNmeaChecksum("$PSRFS,0,aircraft_id,"+addr)+"\r\n")
 	}
 	if globalSettings.SoftRFProtocol > 0 {
 		protocol := strconv.Itoa(globalSettings.SoftRFProtocol)
 		if s, ok := tracker.settings["protocol"]; !ok || protocol != s {
-			messages = append(messages, appendNmeaChecksum("$PSRFS,0,protocol," + protocol) + "\r\n")
+			messages = append(messages, appendNmeaChecksum("$PSRFS,0,protocol,"+protocol)+"\r\n")
 		}
 	}
 	if globalSettings.SoftRFAltProtocol >= 0 {
 		altProtocol := strconv.Itoa(globalSettings.SoftRFAltProtocol)
 		if s, ok := tracker.settings["altprotocol"]; !ok || altProtocol != s {
-			messages = append(messages, appendNmeaChecksum("$PSRFS,0,altprotocol," + altProtocol) + "\r\n")
+			messages = append(messages, appendNmeaChecksum("$PSRFS,0,altprotocol,"+altProtocol)+"\r\n")
 		}
 	}
 	if globalSettings.SoftRFBand > 0 {
 		band := strconv.Itoa(globalSettings.SoftRFBand)
 		if s, ok := tracker.settings["band"]; !ok || band != s {
-			messages = append(messages, appendNmeaChecksum("$PSRFS,0,band," + band) + "\r\n")
+			messages = append(messages, appendNmeaChecksum("$PSRFS,0,band,"+band)+"\r\n")
 		}
 	}
 	if globalSettings.SoftRFAlarm >= 0 {
 		alarm := strconv.Itoa(globalSettings.SoftRFAlarm)
 		if s, ok := tracker.settings["alarm"]; !ok || alarm != s {
-			messages = append(messages, appendNmeaChecksum("$PSRFS,0,alarm," + alarm) + "\r\n")
+			messages = append(messages, appendNmeaChecksum("$PSRFS,0,alarm,"+alarm)+"\r\n")
 		}
 	}
 	if globalSettings.SoftRFRelay >= 0 {
 		relay := strconv.Itoa(globalSettings.SoftRFRelay)
 		if s, ok := tracker.settings["relay"]; !ok || relay != s {
-			messages = append(messages, appendNmeaChecksum("$PSRFS,0,relay," + relay) + "\r\n")
+			messages = append(messages, appendNmeaChecksum("$PSRFS,0,relay,"+relay)+"\r\n")
 		}
 	}
 	stealth := "0"
@@ -529,14 +552,14 @@ func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
 		stealth = "1"
 	}
 	if s, ok := tracker.settings["stealth"]; !ok || stealth != s {
-		messages = append(messages, appendNmeaChecksum("$PSRFS,0,stealth," + stealth) + "\r\n")
+		messages = append(messages, appendNmeaChecksum("$PSRFS,0,stealth,"+stealth)+"\r\n")
 	}
 	noTrack := "0"
 	if globalSettings.SoftRFNoTrack {
 		noTrack = "1"
 	}
 	if s, ok := tracker.settings["no_track"]; !ok || noTrack != s {
-		messages = append(messages, appendNmeaChecksum("$PSRFS,0,no_track," + noTrack) + "\r\n")
+		messages = append(messages, appendNmeaChecksum("$PSRFS,0,no_track,"+noTrack)+"\r\n")
 	}
 
 	for _, msg := range messages {
@@ -547,15 +570,6 @@ func (tracker *SoftRF) writeConfigFromSettings(serialPort *serial.Port) bool {
 	if len(messages) > 0 {
 		serialPort.Write([]byte(appendNmeaChecksum("$PSRFC,SAV") + "\r\n")) // Finally reboot
 	}
-	
+
 	return len(messages) > 0
 }
-
-
-
-
-
-
-
-
-
