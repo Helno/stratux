@@ -346,6 +346,45 @@ func (tracker *SoftRF) initNewConnection(serialPort *serial.Port) {
 	tracker.settings = make(map[string]string)
 }
 
+func (tracker *SoftRF) applyIdentityConfigToGlobalSettings() {
+	acftTypeValue, ok := tracker.settings["acft_type"]
+	if !ok {
+		return
+	}
+	addrTypeValue, ok := tracker.settings["id_method"]
+	if !ok {
+		return
+	}
+	addrValue, ok := tracker.settings["aircraft_id"]
+	if !ok {
+		return
+	}
+
+	softRFAcftType, err := strconv.Atoi(acftTypeValue)
+	if err != nil {
+		log.Printf("Ignoring SoftRF identity snapshot with invalid acft_type=%q", acftTypeValue)
+		return
+	}
+	acftType := mapAircraftType(typeMappingOgn2SoftRF, false, softRFAcftType)
+	if acftType < 0 {
+		log.Printf("Ignoring SoftRF identity snapshot with unsupported acft_type=%q", acftTypeValue)
+		return
+	}
+	addrType, err := strconv.Atoi(addrTypeValue)
+	if err != nil || addrType < 0 {
+		log.Printf("Ignoring SoftRF identity snapshot with invalid id_method=%q", addrTypeValue)
+		return
+	}
+	if addrValue == "" || addrValue == "?" {
+		log.Printf("Ignoring SoftRF identity snapshot with invalid aircraft_id=%q", addrValue)
+		return
+	}
+
+	globalSettings.OGNAcftType = acftType
+	globalSettings.OGNAddrType = addrType
+	globalSettings.OGNAddr = addrValue
+}
+
 func (tracker *SoftRF) applyExtendedConfigToGlobalSettings() {
 	for _, key := range softRFExtendedConfigKeys {
 		if _, ok := tracker.settings[key]; !ok {
@@ -399,16 +438,12 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 	if nmea[0] == "PSRFS" {
 		key, value := nmea[2], nmea[3]
 		log.Printf("Received SoftRF config %s=%s", key, value)
-		tracker.settings[key] = value
-		if key == "acft_type" {
-			acType, _ := strconv.Atoi(value)
-			acType = mapAircraftType(typeMappingOgn2SoftRF, false, acType)
-			globalSettings.OGNAcftType = acType
-		} else if key == "id_method" {
-			globalSettings.OGNAddrType, _ = strconv.Atoi(value)
-		} else if key == "aircraft_id" {
-			globalSettings.OGNAddr = value
+		if value == "?" {
+			log.Printf("Ignoring SoftRF config %s=%q", key, value)
+			return true
 		}
+		tracker.settings[key] = value
+		tracker.applyIdentityConfigToGlobalSettings()
 		tracker.applyExtendedConfigToGlobalSettings()
 		return true
 	}
