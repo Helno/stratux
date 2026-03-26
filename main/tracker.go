@@ -388,10 +388,16 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 			}
 		}
 
-		// After config is fully read for the first time (or after reconnect),
-		// apply any pending user changes that differ from device state.
+		// After config is fully read (or after reconnect), apply any pending
+		// user changes that differ from device state. Defer to let the device
+		// finish sending readback responses before we write.
 		if !wasConfigRead && tracker.isConfigRead() {
-			writeTrackerConfigFromSettings()
+			go func() {
+				time.Sleep(2 * time.Second)
+				if tracker == detectedTracker {
+					writeTrackerConfigFromSettings()
+				}
+			}()
 		}
 
 		return true
