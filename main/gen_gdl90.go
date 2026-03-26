@@ -1426,6 +1426,26 @@ func readSettings() {
 		return
 	}
 	log.Printf("read in settings.\n")
+
+	// SoftRF settings: 0 is not a valid value for Protocol, Band, or TxPower,
+	// so if they are 0 after loading an old config file, reset to -1 (unread).
+	if globalSettings.SoftRFProtocol == 0 {
+		globalSettings.SoftRFProtocol = -1
+	}
+	if globalSettings.SoftRFBand == 0 {
+		globalSettings.SoftRFBand = -1
+	}
+	if globalSettings.SoftRFTxPower == 0 {
+		globalSettings.SoftRFTxPower = -1
+	}
+	// AltProtocol, Alarm, and Relay: 0 is valid (none/off), but we need a way
+	// to distinguish "not yet read" from "intentionally set to 0". Use -1 only
+	// if Protocol is also unread, meaning no SoftRF config has ever been saved.
+	if globalSettings.SoftRFProtocol == -1 {
+		globalSettings.SoftRFAltProtocol = -1
+		globalSettings.SoftRFAlarm = -1
+		globalSettings.SoftRFRelay = -1
+	}
 }
 
 func addSystemError(err error) {
