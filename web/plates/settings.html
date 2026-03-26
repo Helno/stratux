@@ -143,9 +143,7 @@
                         </div>
 
                         <!-- SoftRF-specific settings (hardware code 13) -->
-                        <div ng-show="gpsHardwareCode==13">
-                            <div class="separator"></div>
-
+                        <div ng-show="gpsHardwareCode==13" class="reset-flow" style="width:100%">
                             <!-- RF Protocol -->
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">RF Protocol</label>
@@ -199,8 +197,6 @@
                                     <option value="0">Off (receive only)</option>
                                 </select>
                             </div>
-
-                            <div class="separator"></div>
 
                             <!-- Alarm Method -->
                             <div class="form-group reset-flow">

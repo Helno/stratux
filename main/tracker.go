@@ -347,6 +347,9 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 	// See output of $PSRFS,0,?*4B
 	if nmea[0] == "PSRFS" {
 		key, value := nmea[2], nmea[3]
+		if value == "?" {
+			return true // ignore query echoes
+		}
 		log.Printf("Received SoftRF config %s=%s", key, value)
 		tracker.settings[key] = value
 		if key == "acft_type" {
