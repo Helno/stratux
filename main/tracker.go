@@ -351,7 +351,10 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 			return true // ignore query echoes
 		}
 		log.Printf("Received SoftRF config %s=%s", key, value)
+		wasConfigRead := tracker.isConfigRead()
 		tracker.settings[key] = value
+
+		// Identity fields: always update globalSettings from device
 		if key == "acft_type" {
 			acType, _ := strconv.Atoi(value)
 			acType = mapAircraftType(typeMappingOgn2SoftRF, false, acType)
@@ -360,23 +363,37 @@ func (tracker *SoftRF) onNmea(serialPort *serial.Port, nmea []string) bool {
 			globalSettings.OGNAddrType, _ = strconv.Atoi(value)
 		} else if key == "aircraft_id" {
 			globalSettings.OGNAddr = value
-		} else if key == "protocol" {
-			globalSettings.SoftRFProtocol, _ = strconv.Atoi(value)
-		} else if key == "altprotocol" {
-			globalSettings.SoftRFAltProtocol, _ = strconv.Atoi(value)
-		} else if key == "band" {
-			globalSettings.SoftRFBand, _ = strconv.Atoi(value)
-		} else if key == "alarm" {
-			globalSettings.SoftRFAlarm, _ = strconv.Atoi(value)
-		} else if key == "relay" {
-			globalSettings.SoftRFRelay, _ = strconv.Atoi(value)
-		} else if key == "tx_power" {
-			globalSettings.SoftRFTxPower, _ = strconv.Atoi(value)
-		} else if key == "stealth" {
-			globalSettings.SoftRFStealth = value == "1"
-		} else if key == "no_track" {
-			globalSettings.SoftRFNoTrack = value == "1"
 		}
+
+		// SoftRF-specific fields: only update globalSettings on initial read
+		// (when Protocol is still -1). After that, globalSettings reflects the
+		// user's desired state, and tracker.settings tracks the device state.
+		if globalSettings.SoftRFProtocol == -1 {
+			if key == "protocol" {
+				globalSettings.SoftRFProtocol, _ = strconv.Atoi(value)
+			} else if key == "altprotocol" {
+				globalSettings.SoftRFAltProtocol, _ = strconv.Atoi(value)
+			} else if key == "band" {
+				globalSettings.SoftRFBand, _ = strconv.Atoi(value)
+			} else if key == "alarm" {
+				globalSettings.SoftRFAlarm, _ = strconv.Atoi(value)
+			} else if key == "relay" {
+				globalSettings.SoftRFRelay, _ = strconv.Atoi(value)
+			} else if key == "tx_power" {
+				globalSettings.SoftRFTxPower, _ = strconv.Atoi(value)
+			} else if key == "stealth" {
+				globalSettings.SoftRFStealth = value == "1"
+			} else if key == "no_track" {
+				globalSettings.SoftRFNoTrack = value == "1"
+			}
+		}
+
+		// After config is fully read for the first time (or after reconnect),
+		// apply any pending user changes that differ from device state.
+		if !wasConfigRead && tracker.isConfigRead() {
+			writeTrackerConfigFromSettings()
+		}
+
 		return true
 	}
 
