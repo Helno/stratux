@@ -1244,6 +1244,16 @@ type settings struct {
 	OGNReg               string
 	OGNTxPower           int
 
+	// SoftRF-specific settings (Moshe-Braner fork)
+	SoftRFProtocol       int            // 1=OGNTP, 2=P3I, 5=FANET, 6=Legacy, 7=Latest, 8=ADS-L (-1 while unread)
+	SoftRFAltProtocol    int            // 0=none, or a valid secondary protocol value (-1 while unread)
+	SoftRFBand           int            // 1=EU, 2=US, 3=AU, 4=NZ, 5=RU, 6=CN, 7=UK, 8=IN, 9=IL, 10=KR (-1 while unread)
+	SoftRFAlarm          int            // 0=none, 1=distance, 2=vector, 3=FLARM (-1 while unread)
+	SoftRFRelay          int            // 0=off, 1=landed, 2=all, 3=relay-only (-1 while unread)
+	SoftRFTxPower        int            // 0=off, 1=low, 2=full (-1 while unread)
+	SoftRFStealth        bool
+	SoftRFNoTrack        bool
+
 	PWMDutyMin           int
 
 	// manual GPS config  (versus autodetect)
@@ -1362,6 +1372,14 @@ func defaultSettings() {
 	globalSettings.DeveloperMode = false
 	globalSettings.StaticIps = make([]string, 0)
 	globalSettings.NoSleep = false
+
+	// SoftRF defaults: -1 means "not yet read from device"
+	globalSettings.SoftRFProtocol = -1
+	globalSettings.SoftRFAltProtocol = -1
+	globalSettings.SoftRFBand = -1
+	globalSettings.SoftRFAlarm = -1
+	globalSettings.SoftRFRelay = -1
+	globalSettings.SoftRFTxPower = -1
 	globalSettings.EstimateBearinglessDist = false
 
 	globalSettings.WiFiChannel = 1
