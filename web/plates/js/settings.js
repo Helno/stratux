@@ -723,12 +723,12 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 
 	// SoftRF protocol compatibility map
 	var softRFCompatMap = {
-		'7':  {'1':true, '2':true, '5':true, '6':true, '8':true},  // Latest: all others
-		'6':  {'1':true, '7':true, '8':true},                       // Legacy: OGNTP, Latest, ADS-L
-		'1':  {'2':true, '5':true, '6':true, '7':true, '8':true},  // OGNTP: P3I, FANET, Legacy, Latest, ADS-L
+		'7':  {'1':true, '2':true, '5':true, '6':true, '8':true},  // Latest: OGNTP, P3I, FANET, Legacy, ADS-L
+		'6':  {'7':true},                                            // Legacy: Latest only (T-Echo restriction)
+		'1':  {'2':true, '5':true, '7':true, '8':true},             // OGNTP: P3I, FANET, Latest, ADS-L
 		'2':  {'1':true, '7':true, '8':true},                       // P3I: OGNTP, Latest, ADS-L
 		'5':  {'1':true, '7':true, '8':true},                       // FANET: OGNTP, Latest, ADS-L
-		'8':  {'1':true, '2':true, '5':true, '6':true, '7':true},  // ADS-L: all others
+		'8':  {'1':true, '2':true, '5':true, '7':true},             // ADS-L: OGNTP, P3I, FANET, Latest
 	};
 
 	$scope.updateSoftRFCompatProtocols = function() {
