@@ -427,16 +427,8 @@ func updateExtraLogging() {
 	logMap["GPSTrueCourse"] = mySituation.GPSTrueCourse
 	logMap["GPSVerticalAccuracy"] = mySituation.GPSVerticalAccuracy
 	logMap["GPSHorizontalAccuracy"] = mySituation.GPSHorizontalAccuracy
-	if mySituation.GPSLatitude != 0 {
-		logMap["GPSLatitude"] = mySituation.GPSLatitude
-	} else {
-		logMap["GPSLatitude"] = 0.0
-	}
-	if mySituation.GPSLongitude != 0 {
-		logMap["GPSLongitude"] = mySituation.GPSLongitude
-	} else {
-		logMap["GPSLongitude"] = 0.0
-	}
+	logMap["GPSLatitude"] = mySituation.GPSLatitude
+	logMap["GPSLongitude"] = mySituation.GPSLongitude
 	if !mySituation.GPSTime.IsZero() {
 		logMap["GPSTime"] = float64(mySituation.GPSTime.UTC().Unix())
 	} else {
