@@ -1321,7 +1321,7 @@ func handleAirportRequest(id string) (Airport, error) {
             type,
             longitude_deg AS lon,
             latitude_deg AS lat,
-            elevation_ft AS elevation,
+            elevation_ft AS elevation
         FROM airports
         WHERE ident = ?;
     `
