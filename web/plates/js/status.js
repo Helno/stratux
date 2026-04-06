@@ -58,6 +58,8 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 			$scope.OGN_messages_max = status.OGN_messages_max;
 			$scope.OGN_messages_total = status.OGN_messages_total;
 			$scope.OGN_connected = status.OGN_connected;
+			$scope.SoftRF_rx_packets = status.SoftRF_rx_packets;
+			$scope.SoftRF_tx_packets = status.SoftRF_tx_packets;
 			$scope.AIS_messages_last_minute = status.AIS_messages_last_minute;
 			$scope.AIS_messages_max = status.AIS_messages_max;
 			$scope.AIS_messages_total = status.AIS_messages_total;
@@ -240,6 +242,7 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 			$scope.visible_uat = settings.UAT_Enabled;
 			$scope.visible_es = settings.ES_Enabled;
 			$scope.visible_ogn = settings.OGN_Enabled || settings.SoftRFEnabled;
+			$scope.visible_softrf = settings.SoftRFEnabled;
 			$scope.visible_ais = settings.AIS_Enabled;
 			$scope.visible_ping = settings.Ping_Enabled;
 			$scope.visible_pong = settings.Pong_Enabled;

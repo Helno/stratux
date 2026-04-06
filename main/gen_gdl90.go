@@ -1324,6 +1324,8 @@ type status struct {
 	NightMode                                  bool // For turning off LEDs.
 	OGN_noise_db                               float32
 	OGN_gain_db                                float32
+	SoftRF_rx_packets                          uint32
+	SoftRF_tx_packets                          uint32
 	OGN_tx_enabled                             bool // If ogn-rx-eu uses a local tx module for transmission
 
 	OGNPrevRandomAddr                          string    // when OGN is in random stealth mode, it's ID changes randomly - keep the previous one so we can filter properly

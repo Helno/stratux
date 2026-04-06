@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -197,7 +198,7 @@ func softRFListen() {
 			scanner := bufio.NewScanner(stdout)
 			for scanner.Scan() {
 				line := scanner.Text()
-				if !strings.HasPrefix(line, "$PFL") {
+				if !strings.HasPrefix(line, "$PFL") && !strings.HasPrefix(line, "$PSRFH") {
 					continue
 				}
 				// Strip checksum suffix before splitting fields.
@@ -218,6 +219,16 @@ func softRFListen() {
 					msgLogAppend(m)
 				case "$PFLAU":
 					parseFlarmPFLAU(fields)
+				case "$PSRFH":
+					// $PSRFH,addr,proto,altproto,millis,voltage,heap,rx_pkts,tx_pkts,nacft,maxrssi
+					if len(fields) >= 9 {
+						if rx, err := strconv.ParseUint(fields[7], 10, 32); err == nil {
+							globalStatus.SoftRF_rx_packets = uint32(rx)
+						}
+						if tx, err := strconv.ParseUint(fields[8], 10, 32); err == nil {
+							globalStatus.SoftRF_tx_packets = uint32(tx)
+						}
+					}
 				}
 			}
 		}()
