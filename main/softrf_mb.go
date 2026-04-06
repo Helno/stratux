@@ -213,6 +213,28 @@ func softRFListen() {
 				switch fields[0] {
 				case "$PFLAA":
 					parseFlarmPFLAA(fields)
+					// Count by protocol: the ID field (index 6) has format ADDR!PREFIX_ADDR
+					// where PREFIX is "FLR" (FLARM Latest), "FLO" (FLARM Legacy), "ADL" (ADS-L), etc.
+					if len(fields) > 6 {
+						id := fields[6]
+						if bang := strings.Index(id, "!"); bang >= 0 {
+							rest := id[bang+1:]
+							prefix := rest
+							if under := strings.Index(rest, "_"); under >= 0 {
+								prefix = rest[:under]
+							}
+							switch prefix {
+							case "FLR", "LND": // FLARM Latest (LND = landed-out Latest)
+								globalStatus.SoftRF_rx_FLARM_latest++
+							case "FLO": // FLARM Legacy
+								globalStatus.SoftRF_rx_FLARM_legacy++
+							case "ADL": // ADS-L
+								globalStatus.SoftRF_rx_ADSL++
+							default:
+								globalStatus.SoftRF_rx_other++
+							}
+						}
+					}
 					var m msg
 					m.MessageClass = MSGCLASS_OGN
 					m.TimeReceived = stratuxClock.Time

@@ -1326,6 +1326,10 @@ type status struct {
 	OGN_gain_db                                float32
 	SoftRF_rx_packets                          uint32
 	SoftRF_tx_packets                          uint32
+	SoftRF_rx_FLARM_latest                     uint32
+	SoftRF_rx_FLARM_legacy                     uint32
+	SoftRF_rx_ADSL                             uint32
+	SoftRF_rx_other                            uint32
 	OGN_tx_enabled                             bool // If ogn-rx-eu uses a local tx module for transmission
 
 	OGNPrevRandomAddr                          string    // when OGN is in random stealth mode, it's ID changes randomly - keep the previous one so we can filter properly
