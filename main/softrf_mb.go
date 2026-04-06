@@ -213,7 +213,7 @@ func softRFListen() {
 				case "$PFLAA":
 					parseFlarmPFLAA(fields)
 					var m msg
-					m.MessageClass = MSGCLASS_SOFTRF
+					m.MessageClass = MSGCLASS_OGN
 					m.TimeReceived = stratuxClock.Time
 					msgLogAppend(m)
 				case "$PFLAU":

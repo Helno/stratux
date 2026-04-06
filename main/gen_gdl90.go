@@ -74,11 +74,10 @@ const (
 	MSGTYPE_BASIC_REPORT = 0x1E
 	MSGTYPE_LONG_REPORT  = 0x1F
 
-	MSGCLASS_UAT    = 0
-	MSGCLASS_ES     = 1
-	MSGCLASS_OGN    = 2
-	MSGCLASS_AIS    = 3
-	MSGCLASS_SOFTRF = 4
+	MSGCLASS_UAT   = 0
+	MSGCLASS_ES    = 1
+	MSGCLASS_OGN   = 2
+	MSGCLASS_AIS   = 3
 
 	LON_LAT_RESOLUTION = float32(180.0 / 8388608.0)
 	TRACK_RESOLUTION   = float32(360.0 / 256.0)
@@ -876,7 +875,6 @@ func updateMessageStats() {
 	ES_messages_last_minute := uint(0)
 	OGN_messages_last_minute := uint(0)
 	AIS_messages_last_minute := uint(0)
-	SoftRF_messages_last_minute := uint(0)
 
 	// Clear out ADSBTowers stats.
 	for t, tinf := range ADSBTowers {
@@ -917,8 +915,6 @@ func updateMessageStats() {
 				OGN_messages_last_minute++
 			} else if msgLog[i].MessageClass == MSGCLASS_AIS {
 				AIS_messages_last_minute++
-			} else if msgLog[i].MessageClass == MSGCLASS_SOFTRF {
-				SoftRF_messages_last_minute++
 			}
 		}
 	}
@@ -927,7 +923,6 @@ func updateMessageStats() {
 	globalStatus.ES_messages_last_minute = ES_messages_last_minute
 	globalStatus.OGN_messages_last_minute = OGN_messages_last_minute
 	globalStatus.AIS_messages_last_minute = AIS_messages_last_minute
-	globalStatus.SoftRF_messages_last_minute = SoftRF_messages_last_minute
 
 	// Update "max messages/min" counters.
 	if globalStatus.UAT_messages_max < UAT_messages_last_minute {
@@ -942,10 +937,6 @@ func updateMessageStats() {
 	if globalStatus.AIS_messages_max < AIS_messages_last_minute {
 		globalStatus.AIS_messages_max = AIS_messages_last_minute
 	}
-	if globalStatus.SoftRF_messages_max < SoftRF_messages_last_minute {
-		globalStatus.SoftRF_messages_max = SoftRF_messages_last_minute
-	}
-	globalStatus.SoftRF_messages_total += uint64(SoftRF_messages_last_minute)
 
 	// Update average signal strength over last minute for all ADSB towers.
 	for t, tinf := range ADSBTowers {
@@ -1296,9 +1287,6 @@ type status struct {
 	AIS_messages_max                           uint
 	AIS_messages_total                         uint64
 	AIS_connected                              bool
-	SoftRF_messages_last_minute               uint
-	SoftRF_messages_max                       uint
-	SoftRF_messages_total                     uint64
 	UAT_traffic_targets_tracking               uint16
 	ES_traffic_targets_tracking                uint16
 	Ping_connected                             bool
