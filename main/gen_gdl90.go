@@ -1253,6 +1253,7 @@ type settings struct {
 	SoftRFTxPower        int            // 0=off, 1=low, 2=full (-1 while unread)
 	SoftRFStealth        bool
 	SoftRFNoTrack        bool
+	SoftRFEnabled        bool           // enable SoftRF-MB HAT subprocess
 
 	PWMDutyMin           int
 
