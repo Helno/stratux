@@ -70,6 +70,15 @@
 					</div></span>
 					<span class="col-xs-2 text-right">{{AIS_messages_max}}</span>
 				</div>
+				<div class="row" ng-class="{'section_invisible': !visible_softrf}">
+					<span class="col-xs-1"></span>
+					<label class="col-xs-3">SoftRF HAT:</label>
+					<span class="col-xs-6"><div class="bar_container">
+						<div class="bar_display" ng-attr-style="background-color: {{softRFStyleColor}}; width:{{SoftRF_messages_max ? 100*SoftRF_messages_last_minute / SoftRF_messages_max : 0}}%;"></div>
+						<div class="bar_text">{{SoftRF_messages_last_minute}}</div>
+					</div></span>
+					<span class="col-xs-2 text-right">{{SoftRF_messages_max}}</span>
+				</div>
 				<div class="row" ng-class="{'section_invisible': !visible_ogn}">
 					<span class="col-xs-1"></span>
 					<label class="col-xs-3">OGN{{OGN_connected ? "" : " (disconnected)"}}:</label>

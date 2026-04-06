@@ -152,7 +152,8 @@ app.controller('MainCtrl', function ($scope, $http) {
 		2: '#FF8C00',      // UAT
 		4: 'green',          // OGN
 		5: '#0077be',         // AIS
-		6: 'darkkhaki'     // UAT bar color
+		6: 'darkkhaki',    // UAT bar color
+		7: 'darkorchid'    // SoftRF HAT
 	}
 
 	const getTrafficSourceColor = (source) => {

@@ -142,8 +142,8 @@
                             <input class="col-xs-7" type="number" min="-32" max="31" ng-model="OGNTxPower" />
                         </div>
 
-                        <!-- SoftRF-specific settings (hardware code 13) -->
-                        <div ng-show="gpsHardwareCode==13" class="reset-flow" style="width:100%">
+                        <!-- SoftRF-specific settings (hardware code 13, or HAT enabled) -->
+                        <div ng-show="gpsHardwareCode==13 || SoftRFEnabled" class="reset-flow" style="width:100%">
                             <!-- RF Protocol -->
                             <div class="form-group reset-flow">
                                 <label class="control-label col-xs-5">RF Protocol</label>

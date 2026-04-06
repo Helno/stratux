@@ -62,6 +62,8 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 			$scope.AIS_messages_max = status.AIS_messages_max;
 			$scope.AIS_messages_total = status.AIS_messages_total;
 			$scope.AIS_connected = status.AIS_connected;
+			$scope.SoftRF_messages_last_minute = status.SoftRF_messages_last_minute;
+			$scope.SoftRF_messages_max = status.SoftRF_messages_max;
 			$scope.GPS_satellites_locked = status.GPS_satellites_locked;
 			$scope.GPS_satellites_tracked = status.GPS_satellites_tracked;
 			$scope.GPS_satellites_seen = status.GPS_satellites_seen;
@@ -225,6 +227,7 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 		$scope.uatStyleColor = craftService.getTrafficSourceColor(6);
 		$scope.ognStyleColor = craftService.getTrafficSourceColor(4);
 		$scope.aisStyleColor = craftService.getTrafficSourceColor(5);
+		$scope.softRFStyleColor = craftService.getTrafficSourceColor(7);
 
 		// Simple GET request example (note: responce is asynchronous)
 		$http.get(URL_SETTINGS_GET).
@@ -241,6 +244,7 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 			$scope.visible_es = settings.ES_Enabled;
 			$scope.visible_ogn = settings.OGN_Enabled;
 			$scope.visible_ais = settings.AIS_Enabled;
+			$scope.visible_softrf = settings.SoftRFEnabled;
 			$scope.visible_ping = settings.Ping_Enabled;
 			$scope.visible_pong = settings.Pong_Enabled;
 			if (settings.Ping_Enabled) {
