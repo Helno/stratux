@@ -105,6 +105,13 @@ func writeSoftRFSettings() error {
 		noTrack = 1
 	}
 
+	// Enable dual FLARM+ADS-L simultaneous reception when both are configured.
+	// Without flr_adsl=1, ADS-L is only received in rare 8-second alt-protocol slots.
+	flrAdsl := 0
+	if (protocol == 7 || altProtocol == 7) && (protocol == 8 || altProtocol == 8) {
+		flrAdsl = 1
+	}
+
 	content := fmt.Sprintf(
 		"SoftRF,1\n"+
 			"mode,0\n"+
@@ -119,6 +126,7 @@ func writeSoftRFSettings() error {
 			"tx_power,%d\n"+
 			"stealth,%d\n"+
 			"no_track,%d\n"+
+			"flr_adsl,%d\n"+  // dual FLARM Latest + ADS-L simultaneous reception
 			"nmea_out,1\n"+   // output to stdout
 			"nmea_g,00\n"+    // no GPS sentences (Stratux has its own GPS)
 			"nmea_s,00\n"+    // no sensor sentences
@@ -130,7 +138,7 @@ func writeSoftRFSettings() error {
 		protocol, altProtocol, band,
 		acftType, idMethod, aircraftID,
 		alarm, relay, txPower,
-		stealth, noTrack,
+		stealth, noTrack, flrAdsl,
 	)
 
 	return os.WriteFile(softRFSettingsPath, []byte(content), 0644)
