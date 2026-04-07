@@ -105,8 +105,10 @@ func writeSoftRFSettings() error {
 		noTrack = 1
 	}
 
-	// Enable dual FLARM+ADS-L simultaneous reception when both are configured.
-	// Without flr_adsl=1, ADS-L is only received in rare 8-second alt-protocol slots.
+	// flr_adsl enables dual FLARM Latest + ADS-L simultaneous reception using a
+	// combined syncword. As of MB179+, ADS-L uses the FLARM frequency plan on all
+	// bands (not OGN hopping), so both FLARM Latest and ADS-L share the same channel.
+	// Enable whenever FLARM Latest and ADS-L are used together.
 	flrAdsl := 0
 	if (protocol == 7 || altProtocol == 7) && (protocol == 8 || altProtocol == 8) {
 		flrAdsl = 1
