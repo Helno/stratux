@@ -754,8 +754,8 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			"OGNTxPower": $scope.OGNTxPower
 		};
 
-		// Include SoftRF-specific settings if a SoftRF device is connected
-		if ($scope.gpsHardwareCode == 13) {
+		// Include SoftRF-specific settings if a SoftRF device is connected or HAT is enabled
+		if ($scope.gpsHardwareCode == 13 || $scope.SoftRFEnabled) {
 			newsettings["SoftRFProtocol"] = parseInt($scope.SoftRFProtocol);
 			newsettings["SoftRFAltProtocol"] = parseInt($scope.SoftRFAltProtocol);
 			newsettings["SoftRFBand"] = parseInt($scope.SoftRFBand);
