@@ -346,6 +346,7 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 
 		// SoftRF-specific settings
 		$scope.SoftRFEnabled = settings.SoftRFEnabled;
+		$scope.hasTracker = $scope.hasTracker || settings.SoftRFEnabled;
 		$scope.SoftRFProtocol = (settings.SoftRFProtocol >= 0) ? settings.SoftRFProtocol.toString() : "7";
 		$scope.SoftRFAltProtocol = (settings.SoftRFAltProtocol >= 0) ? settings.SoftRFAltProtocol.toString() : "0";
 		$scope.SoftRFBand = (settings.SoftRFBand >= 0) ? settings.SoftRFBand.toString() : "2";
