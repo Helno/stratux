@@ -1677,6 +1677,9 @@ func gracefulShutdown() {
 	pingKill()
 	pongKill()
 
+	// Shut down SoftRF subprocess.
+	softRFShutdown()
+
 	// Shut down data logging.
 	if dataLogStarted {
 		closeDataLog()

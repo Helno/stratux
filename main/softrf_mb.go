@@ -32,6 +32,9 @@ var softRFNMEAChan = make(chan string, 100)
 // softRFRestartChan signals the subprocess manager to restart with new settings.
 var softRFRestartChan = make(chan bool, 1)
 
+// softRFShutdownChan signals the subprocess manager to kill the subprocess and exit.
+var softRFShutdownChan = make(chan bool, 1)
+
 // softRFPublishNmea is called from gps.go for every valid NMEA sentence.
 func softRFPublishNmea(nmea string) {
 	if !globalSettings.SoftRFEnabled {
@@ -51,6 +54,14 @@ func softRFPublishNmea(nmea string) {
 func softRFSignalRestart() {
 	select {
 	case softRFRestartChan <- true:
+	default:
+	}
+}
+
+// softRFShutdown kills the SoftRF subprocess during graceful shutdown.
+func softRFShutdown() {
+	select {
+	case softRFShutdownChan <- true:
 	default:
 	}
 }
@@ -292,6 +303,14 @@ func softRFListen() {
 			log.Printf("SoftRF HAT: restarting subprocess for settings change")
 			cmd.Process.Kill()
 			<-exitChan
+		case <-softRFShutdownChan:
+			log.Printf("SoftRF HAT: shutting down subprocess")
+			cmd.Process.Kill()
+			<-exitChan
+			stdin.Close()
+			<-stdoutScanDone
+			<-stderrScanDone
+			return
 		}
 
 		stdin.Close()
