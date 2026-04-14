@@ -105,10 +105,9 @@ func writeSoftRFSettings() error {
 		noTrack = 1
 	}
 
-	// flr_adsl enables dual FLARM Latest + ADS-L simultaneous reception using a
-	// combined syncword. As of MB179+, ADS-L uses the FLARM frequency plan on all
-	// bands (not OGN hopping), so both FLARM Latest and ADS-L share the same channel.
-	// Enable whenever FLARM Latest and ADS-L are used together.
+	// flr_adsl enables simultaneous FLARM Latest + ADS-L reception using a combined
+	// 2-byte syncword {0x56, 0x66}. SX1262 (Core1262 HF) writes both syncword bytes
+	// directly to hardware FSK registers via SetSyncWordFsk(), so this works correctly.
 	flrAdsl := 0
 	if (protocol == 7 || altProtocol == 7) && (protocol == 8 || altProtocol == 8) {
 		flrAdsl = 1
@@ -180,7 +179,12 @@ func softRFListen() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		cmd.Stderr = nil // discard SoftRF debug/info stderr
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			log.Printf("SoftRF HAT: stderr pipe error: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
 		if err := cmd.Start(); err != nil {
 			log.Printf("SoftRF HAT: failed to start: %v", err)
@@ -202,13 +206,16 @@ func softRFListen() {
 		}()
 
 		// Reader: parse $PFLAA/$PFLAU from SoftRF stdout.
-		scanDone := make(chan struct{}, 1)
+		stdoutScanDone := make(chan struct{}, 1)
 		go func() {
-			defer func() { scanDone <- struct{}{} }()
+			defer func() { stdoutScanDone <- struct{}{} }()
 			scanner := bufio.NewScanner(stdout)
 			for scanner.Scan() {
 				line := scanner.Text()
 				if !strings.HasPrefix(line, "$PFL") && !strings.HasPrefix(line, "$PSRFH") {
+					if globalSettings.DEBUG && len(line) > 0 {
+						log.Printf("SoftRF HAT stdout: %s", line)
+					}
 					continue
 				}
 				// Strip checksum suffix before splitting fields.
@@ -265,6 +272,18 @@ func softRFListen() {
 			}
 		}()
 
+		stderrScanDone := make(chan struct{}, 1)
+		go func() {
+			defer func() { stderrScanDone <- struct{}{} }()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if len(line) > 0 {
+					log.Printf("SoftRF HAT stderr: %s", line)
+				}
+			}
+		}()
+
 		// Wait for subprocess exit or a settings-change restart signal.
 		select {
 		case err := <-exitChan:
@@ -276,7 +295,8 @@ func softRFListen() {
 		}
 
 		stdin.Close()
-		<-scanDone
+		<-stdoutScanDone
+		<-stderrScanDone
 		time.Sleep(3 * time.Second)
 	}
 }
