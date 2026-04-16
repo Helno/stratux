@@ -117,10 +117,14 @@ func writeSoftRFSettings() error {
 	}
 
 	// flr_adsl enables simultaneous FLARM Latest + ADS-L reception using a combined
-	// 2-byte syncword {0x56, 0x66}. Disabled for now: causes TX timeout and RX failure
-	// on Badge Edition (MB177) and may not be compatible with all SoftRF firmware versions.
-	// Without flr_adsl, the Pi time-slots between protocols using altprotocol switching.
+	// 2-byte syncword {0x56, 0x66}. Without flr_adsl, the SX1262 mixed protocol
+	// time-slotting is broken and reception drops to near-zero. The Pi's SoftRF binary
+	// requires flr_adsl=1 for reliable dual-protocol operation. TX still uses standard
+	// per-protocol syncwords, so non-flr_adsl devices can receive the Pi's transmissions.
 	flrAdsl := 0
+	if (protocol == 7 || altProtocol == 7) && (protocol == 8 || altProtocol == 8) {
+		flrAdsl = 1
+	}
 
 	content := fmt.Sprintf(
 		"SoftRF,1\n"+
