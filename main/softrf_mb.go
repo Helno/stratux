@@ -36,9 +36,22 @@ var softRFRestartChan = make(chan bool, 1)
 var softRFShutdownChan = make(chan bool, 1)
 
 // softRFPublishNmea is called from gps.go for every valid NMEA sentence.
+// Only GGA and RMC sentences are forwarded — SoftRF's RPi_PickGNSSFix() needs
+// both within 600ms to sync its internal clock, and flooding stdin with all
+// NMEA types causes the GGA/RMC pair to arrive in different read cycles,
+// resulting in a drifting RF_time that breaks FLARM decryption.
 func softRFPublishNmea(nmea string) {
 	if !globalSettings.SoftRFEnabled {
 		return
+	}
+	// Only forward GGA and RMC — the two sentences needed for GNSS time sync.
+	if len(nmea) > 6 {
+		talker := nmea[1:3] // e.g. "GP", "GN", "GL"
+		_ = talker
+		sentenceType := nmea[3:6]
+		if sentenceType != "GGA" && sentenceType != "RMC" {
+			return
+		}
 	}
 	if !strings.HasSuffix(nmea, "\r\n") {
 		nmea += "\r\n"
