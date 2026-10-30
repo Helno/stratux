@@ -200,11 +200,17 @@ func sendM1421Command(port *serial.Port, cmd string) error {
 		return fmt.Errorf("write failed: %w", err)
 	}
 
-	// Read response with timeout
-	port.SetReadTimeout(500 * time.Millisecond)
+	// Read response with simple timeout by attempting reads
 	rdr := bufio.NewReader(port)
+	timeout := time.After(500 * time.Millisecond)
 
 	for i := 0; i < 10; i++ { // Try reading up to 10 lines
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for response")
+		default:
+		}
+
 		line, err := rdr.ReadString('\n')
 		if err != nil {
 			continue
