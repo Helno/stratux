@@ -26,10 +26,15 @@ jobs:
           cd image_build
           ./build.sh
 
-      - name: Upload Release Assets
+      - name: Pi Image
+        uses: softprops/action-gh-release@v3
+        with:
+          files: image_build/pi-gen/deploy/*
+          draft: true
+
+      - name: Debian Package
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            image_build/pi-gen/deploy/*
             image_build/pi-gen/stratux/*.deb
           draft: true
