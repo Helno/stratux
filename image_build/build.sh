@@ -29,7 +29,7 @@ mkdir -p pi-gen/stratux
 tar -xzf /tmp/stratux.tar.gz -C pi-gen/stratux
 rm /tmp/stratux.tar.gz
 
-(cd pi-gen/stratux && git submodule update --init --recursive 2>/dev/null || echo "Git submodules skipped")
+(cd pi-gen/stratux && git submodule update --init --recursive 2>/dev/null || true)
 # Build the stratux debian package.
 (cd pi-gen/stratux && make ddpkg)
 ERRCODE=$?
