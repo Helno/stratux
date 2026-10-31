@@ -13,6 +13,9 @@ touch pi-gen/stage3/SKIP_IMAGES pi-gen/stage4/SKIP_IMAGES pi-gen/stage5/SKIP_IMA
 # copy the config file into place
 cp config pi-gen/
 
+# create stage2/10-stratux directory if it doesn't exist
+mkdir -p pi-gen/stage2/10-stratux
+
 # copy the stage2 10-stratux files into place
 rsync -av --delete stage2/10-stratux/ pi-gen/stage2/10-stratux/
 
