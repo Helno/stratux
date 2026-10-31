@@ -38,16 +38,3 @@ jobs:
           path: |
             *.deb
           if-no-files-found: error
-
-      - name: Build SD card image
-        run: |
-          cd image_build
-          ./build.sh
-
-      - name: Upload SD card image
-        uses: actions/upload-artifact@v7
-        with:
-          name: stratux sd card image
-          path: |
-            image_build/pi-gen/deploy/*.img*
-          if-no-files-found: warn
