@@ -51,6 +51,7 @@ func initM1421Serial(isTraceReplayMode bool) error {
 			device, err := detectM1421Device()
 			if err != nil {
 				// Device not detected yet, continue trying
+				log.Printf("M1421 detection attempt: %v\n", err)
 				continue
 			}
 
