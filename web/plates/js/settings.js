@@ -300,6 +300,7 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.APRS_Enabled = settings.APRS_Enabled;
 		$scope.Ping_Enabled = settings.Ping_Enabled;
 		$scope.Pong_Enabled = settings.Pong_Enabled;
+		$scope.M1421_Enabled = settings.M1421_Enabled;
 		$scope.GPS_Enabled = settings.GPS_Enabled;
 		$scope.OGNI2CTXEnabled = settings.OGNI2CTXEnabled;
 
