@@ -81,14 +81,18 @@ func detectM1421Device() (string, error) {
 	for _, devicePath := range m1421UARTPaths {
 		if _, err := os.Stat(devicePath); err != nil {
 			// Device doesn't exist, try next
+			log.Printf("M1421: Device path %s not found\n", devicePath)
 			continue
 		}
+
+		log.Printf("M1421: Found device path %s, probing baud rates...\n", devicePath)
 
 		// Try to probe this UART at common baud rates
 		for _, baud := range m1421BaudRates {
 			config := &serial.Config{Name: devicePath, Baud: baud}
 			port, err := serial.OpenPort(config)
 			if err != nil {
+				log.Printf("M1421: Failed to open %s at %d baud: %v\n", devicePath, baud, err)
 				continue
 			}
 
@@ -99,6 +103,7 @@ func detectM1421Device() (string, error) {
 				return devicePath, nil
 			}
 
+			log.Printf("M1421: AT probe failed at %s:%d\n", devicePath, baud)
 			port.Close()
 		}
 	}
