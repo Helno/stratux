@@ -430,6 +430,8 @@ func handleSettingsSetRequest(w http.ResponseWriter, r *http.Request) {
 						globalSettings.OGNI2CTXEnabled = val.(bool)
 					case "GPS_Enabled":
 						globalSettings.GPS_Enabled = val.(bool)
+					case "M1421_Enabled":
+						globalSettings.M1421_Enabled = val.(bool)
 					case "IMU_Sensor_Enabled":
 						globalSettings.IMU_Sensor_Enabled = val.(bool)
 						if !globalSettings.IMU_Sensor_Enabled && globalStatus.IMUConnected {
@@ -580,6 +582,35 @@ func handleSettingsSetRequest(w http.ResponseWriter, r *http.Request) {
 						reconfigureTracker = true
 					case "OGNTxPower":
 						globalSettings.OGNTxPower = int(val.(float64))
+					case "SoftRFProtocol":
+						v := int(val.(float64))
+						if v >= 0 {
+							globalSettings.SoftRFProtocol = v
+						}
+					case "SoftRFAltProtocol":
+						v := int(val.(float64))
+						if v >= -1 {
+							globalSettings.SoftRFAltProtocol = v
+						}
+					case "SoftRFBand":
+						v := int(val.(float64))
+						if v > 0 {
+							globalSettings.SoftRFBand = v
+						}
+					case "SoftRFAlarm":
+						v := int(val.(float64))
+						if v >= 0 {
+							globalSettings.SoftRFAlarm = v
+						}
+					case "SoftRFRelay":
+						v := int(val.(float64))
+						if v >= 0 {
+							globalSettings.SoftRFRelay = v
+						}
+					case "SoftRFStealth":
+						globalSettings.SoftRFStealth = val.(bool)
+					case "SoftRFNoTrack":
+						globalSettings.SoftRFNoTrack = val.(bool)
 						reconfigureTracker = true
 					case "PWMDutyMin":
 						globalSettings.PWMDutyMin = int(val.(float64))
