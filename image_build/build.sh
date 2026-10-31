@@ -16,20 +16,13 @@ cp config pi-gen/
 # copy the stage2 10-stratux files into place
 rsync -av --delete stage2/10-stratux/ pi-gen/stage2/10-stratux/
 
-# copy the local git repository (with full git history) into pi-gen
-# so the files and git metadata are visible to docker for version detection
+# clone the local git repository (and present branch) into pi-gen
+# so the files are visible to docker
+#
+# NOTE: This means local file changes will NOT be reflected in the image build
 local_git=`pwd`/../
-
-# First, make sure the destination doesn't exist
-(cd pi-gen && rm -rf stratux)
-
-# Use tar to preserve git metadata while copying, avoiding circular reference
-tar -C ${local_git} --exclude='image_build' -czf /tmp/stratux.tar.gz .
-mkdir -p pi-gen/stratux
-tar -xzf /tmp/stratux.tar.gz -C pi-gen/stratux
-rm /tmp/stratux.tar.gz
-
-(cd pi-gen/stratux && git submodule update --init --recursive 2>/dev/null || true)
+(cd pi-gen && rm -rf stratux && git clone ${local_git} stratux)
+(cd pi-gen/stratux && git submodule update --init --recursive)
 # Build the stratux debian package.
 (cd pi-gen/stratux && make ddpkg)
 ERRCODE=$?
