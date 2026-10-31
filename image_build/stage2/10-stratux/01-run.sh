@@ -52,11 +52,12 @@ on_chroot << EOF
     cd /tmp
     
     # Install build dependencies
-    apt install -y git build-essential libdbus-1-dev libglib2.0-dev libudev-dev libical-dev libreadline-dev
+    apt install -y git build-essential autoconf automake libtool libdbus-1-dev libglib2.0-dev libudev-dev libical-dev libreadline-dev
     
     # Clone, build, and install BlueZ 5.82
     git clone --depth 1 --branch ${BLUEZ_VERSION} https://github.com/bluez/bluez.git bluez-src
     cd bluez-src
+    ./bootstrap
     ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-library
     make -j$(nproc)
     make install
