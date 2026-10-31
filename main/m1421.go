@@ -37,6 +37,7 @@ func initM1421Serial(isTraceReplayMode bool) error {
 	}
 
 	go func() {
+		log.Printf("M1421 watcher goroutine started\n")
 		watchTicker := time.NewTicker(2 * time.Second)
 		for {
 			<-watchTicker.C
@@ -47,11 +48,13 @@ func initM1421Serial(isTraceReplayMode bool) error {
 				continue
 			}
 
+			log.Printf("M1421 watcher: M1421_Enabled=%v, M1421_connected=%v - attempting detection\n", globalSettings.M1421_Enabled, globalStatus.M1421_connected)
+
 			// Auto-detect M1421 on GPIO UART
 			device, err := detectM1421Device()
 			if err != nil {
 				// Device not detected yet, continue trying
-				log.Printf("M1421 detection attempt: %v\n", err)
+				log.Printf("M1421 detection attempt failed: %v\n", err)
 				continue
 			}
 
