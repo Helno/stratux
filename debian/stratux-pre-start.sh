@@ -121,10 +121,13 @@ if [ -e ${PACKAGE_UPDATE_LOCATION} ]; then
 		# Not 'overlayctl enable': with the overlay off it mistakes / for its lower layer
 		# and remounts it read-only before the install runs.
 		rm -f /overlay/disable
-		if dpkg -i --force-depends "${UPDATE_TEMP_FILE}"; then
+		if dpkg -i --force-depends "${UPDATE_TEMP_FILE}" 2>&1 | tee -a /var/log/stratux-dpkg.log; then
 			wLog "Package installed successfully."
 		else
 			wLog "ERROR: dpkg failed to install ${UPDATE_TEMP_FILE}."
+			tail -20 /var/log/stratux-dpkg.log | while read line; do
+				wLog "dpkg: $line"
+			done
 		fi
 		rm -f "${UPDATE_TEMP_FILE}"
 		wLog "Finished. Rebooting..."
