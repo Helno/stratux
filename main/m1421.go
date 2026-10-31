@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -81,7 +82,18 @@ func initM1421Serial(isTraceReplayMode bool) error {
 // detectM1421Device probes common GPIO UART paths to find the M1421.
 // Returns the device path if found, error otherwise.
 func detectM1421Device() (string, error) {
+	// Add 10-second timeout to entire detection attempt
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	for _, devicePath := range m1421UARTPaths {
+		// Check if context has timed out
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("M1421 detection timeout")
+		default:
+		}
+
 		if _, err := os.Stat(devicePath); err != nil {
 			// Device doesn't exist, try next
 			log.Printf("M1421: Device path %s not found\n", devicePath)
@@ -92,7 +104,16 @@ func detectM1421Device() (string, error) {
 
 		// Try to probe this UART at common baud rates
 		for _, baud := range m1421BaudRates {
-			config := &serial.Config{Name: devicePath, Baud: baud}
+			// Check if context has timed out
+			select {
+			case <-ctx.Done():
+				log.Printf("M1421: Detection timeout while probing %s\n", devicePath)
+				return "", fmt.Errorf("M1421 detection timeout")
+			default:
+			}
+
+			log.Printf("M1421: Trying %s at %d baud...\n", devicePath, baud)
+			config := &serial.Config{Name: devicePath, Baud: baud, ReadTimeout: 100 * time.Millisecond}
 			port, err := serial.OpenPort(config)
 			if err != nil {
 				log.Printf("M1421: Failed to open %s at %d baud: %v\n", devicePath, baud, err)
