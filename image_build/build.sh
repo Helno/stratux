@@ -4,11 +4,16 @@
 arch=`uname -m`
 echo "arch ${arch}"
 
-# disable full image (stage 5), normal image (stage 4) and desktop image (stage 3)
-touch pi-gen/stage3/SKIP pi-gen/stage4/SKIP pi-gen/stage5/SKIP
+# Check if we're building just the .deb
+BUILD_DEB_ONLY=${1:-false}
 
-# and disable building the images based on the SKIPPED stages
-touch pi-gen/stage3/SKIP_IMAGES pi-gen/stage4/SKIP_IMAGES pi-gen/stage5/SKIP_IMAGES
+if [ "$BUILD_DEB_ONLY" != "deb" ]; then
+	# disable full image (stage 5), normal image (stage 4) and desktop image (stage 3)
+	touch pi-gen/stage3/SKIP pi-gen/stage4/SKIP pi-gen/stage5/SKIP
+
+	# and disable building the images based on the SKIPPED stages
+	touch pi-gen/stage3/SKIP_IMAGES pi-gen/stage4/SKIP_IMAGES pi-gen/stage5/SKIP_IMAGES
+fi
 
 # copy the config file into place
 cp config pi-gen/
@@ -36,6 +41,12 @@ ERRCODE=$?
 if [ $ERRCODE -ne 0 ]; then
 	echo "Error creating the stratux debian package: Returned $ERRCODE"
 	exit $ERRCODE 
+fi
+
+# If building .deb only, skip the image build
+if [ "$BUILD_DEB_ONLY" = "deb" ]; then
+	echo "Built .deb package only (skipping full image build)"
+	exit 0
 fi
 
 # build via docker
