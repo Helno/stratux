@@ -16,13 +16,13 @@ cp config pi-gen/
 # copy the stage2 10-stratux files into place
 rsync -av --delete stage2/10-stratux/ pi-gen/stage2/10-stratux/
 
-# Get the current branch name and remote URL from the local repo
+# Get the current branch name
 current_branch=$(git rev-parse --abbrev-ref HEAD)
-remote_url=$(git config --get remote.origin.url)
 
-# clone from the remote GitHub repo into pi-gen using the current branch
-# This ensures git metadata (tags, history) are available
-(cd pi-gen && rm -rf stratux && git clone --branch ${current_branch} ${remote_url} stratux)
+# Clone from GitHub using explicit fork URL with current branch
+# This ensures proper git metadata (tags, history) for version detection
+fork_url="https://github.com/Helno/stratux.git"
+(cd pi-gen && rm -rf stratux && git clone --branch ${current_branch} ${fork_url} stratux)
 (cd pi-gen/stratux && git submodule update --init --recursive)
 # Build the stratux debian package.
 (cd pi-gen/stratux && make ddpkg)
