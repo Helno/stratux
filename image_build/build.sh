@@ -18,10 +18,10 @@ rsync -av --delete stage2/10-stratux/ pi-gen/stage2/10-stratux/
 
 # clone the local git repository (and present branch) into pi-gen
 # so the files are visible to docker
-# Use rsync to avoid circular copy issues and exclude unnecessary directories
+# Use rsync to avoid circular copy issues and exclude only image_build
 local_git=`pwd`/../
-(cd pi-gen && rm -rf stratux && mkdir -p stratux && rsync -av --exclude=image_build --exclude=.git --delete ${local_git} stratux/)
-(cd pi-gen/stratux && git submodule update --init --recursive 2>/dev/null || echo "Git submodules not available in Docker, continuing...")
+(cd pi-gen && rm -rf stratux && mkdir -p stratux && rsync -av --exclude=image_build --delete ${local_git} stratux/)
+(cd pi-gen/stratux && git submodule update --init --recursive 2>/dev/null || echo "Git submodules not available, continuing...")
 # Build the stratux debian package.
 (cd pi-gen/stratux && make ddpkg)
 ERRCODE=$?
