@@ -1189,6 +1189,7 @@ type settings struct {
 	UAT_Enabled          bool
 	ES_Enabled           bool
 	OGN_Enabled          bool
+	OGN_FreqPlan         int        // 0=auto, 1=EU/Africa(868MHz), 2=USA/Canada(915MHz), 3=S.America/Australia
 	APRS_Enabled         bool
 	AIS_Enabled          bool
 	Ping_Enabled         bool
@@ -1341,6 +1342,7 @@ func defaultSettings() {
 	globalSettings.UAT_Enabled = true
 	globalSettings.ES_Enabled = true
 	globalSettings.OGN_Enabled = false
+	globalSettings.OGN_FreqPlan = 0    // 0=auto (will use region default)
 	globalSettings.M1421_Enabled = false
 	globalSettings.Dump1090Gain = 37.2
 	globalSettings.APRS_Enabled = true

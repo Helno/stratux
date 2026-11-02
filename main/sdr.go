@@ -228,6 +228,8 @@ func (f *OGN) read() {
 	if !globalSettings.OGNI2CTXEnabled {
 		args = append(args, "-t", "off")
 	}
+	// Add frequency plan selection (0=auto, 1=EU/Africa/868MHz, 2=USA/Canada/915MHz, 3=S.America/Australia)
+	args = append(args, "-f", strconv.Itoa(globalSettings.OGN_FreqPlan))
 	cmd := exec.Command(STRATUX_HOME + "/bin/ogn-rx-eu", args...)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
