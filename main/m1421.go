@@ -2,34 +2,39 @@ package main
 
 import (
 	"bufio"
-	"encoding/hex"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/stratux/serial"
 )
 
-var m1421SerialPort *serial.Port
-var m1421SerialConfig *serial.Config
-var m1421Device string // Will be set during auto-detection
+/*
+	m1421.go: ADSBee 1421 dual-band (1090ES + 978 UAT) receiver, connected over USB through the
+	ADSBee 1421 Programmer (a USB CDC serial bridge, udev symlink /dev/adsbee1421).
 
-const M1421_BAUD = 115200
-const M1421_OUTPUT_FORMAT = "beast" // Beast binary format
-const BEAST_ESC = 0x1A
+	The module's console runs at a fixed 1,000,000 baud (changing it can break the programmer bridge).
+	We select the RAW reporting protocol, which emits text lines:
+		#MDS*<hex>;(<src>,<dBm>,<sigq>,<mlat>)    1090 Mode S / ADS-B
+		#UAT*-<hex>;(<dBm>,<sigq>,<mlat>)         978 UAT ADS-B / TIS-B
+		#UAT*+<hex>;(<dBm>,<sigq>,<mlat>)         978 UAT uplink (FIS-B), interleaved + uncorrected
+*/
 
-// Common GPIO UART device paths to probe (in order of preference)
-var m1421UARTPaths = []string{
-	"/dev/ttyAMA0", // Primary UART on Pi 3/4/5
-	"/dev/ttyS0",   // Alternative naming
-	"/dev/serial0", // Symlink to primary UART
-	"/dev/serial1", // Secondary UART (if available)
+const (
+	m1421Device       = "/dev/adsbee1421"
+	m1421Baud         = 1000000
+	m1421Dump1090Addr = "127.0.0.1:30001"
+	m1421KeepAlive    = 30 * time.Second
+)
+
+var m1421Commands = []string{
+	"AT+LOG_LEVEL=SILENT",
+	"AT+PROTOCOL_OUT=CONSOLE,RAW",
 }
-
-// Supported baud rates for auto-detection
-var m1421BaudRates = []int{9600, 19200, 38400, 57600, 115200, 230400, 460800}
 
 func initM1421Serial(isTraceReplayMode bool) error {
 	if isTraceReplayMode {
@@ -37,364 +42,160 @@ func initM1421Serial(isTraceReplayMode bool) error {
 	}
 
 	go func() {
-		watchTicker := time.NewTicker(2 * time.Second)
 		for {
-			<-watchTicker.C
+			time.Sleep(2 * time.Second)
 
-			// Watch for M1421 being enabled.
 			if !globalSettings.M1421_Enabled || globalStatus.M1421_connected {
-				// M1421 not enabled or already connected.
+				continue
+			}
+			if _, err := os.Stat(m1421Device); err != nil {
 				continue
 			}
 
-			// Auto-detect M1421 on GPIO UART
-			device, err := detectM1421Device()
+			port, err := openM1421()
 			if err != nil {
-				// Device not detected yet, continue trying
-				log.Printf("M1421 detection attempt: %v\n", err)
+				log.Printf("M1421: %s\n", err.Error())
 				continue
 			}
 
-			m1421Device = device
-			log.Printf("===== M1421 Device found at %s =====\n", m1421Device)
-
-			// Attempt to detect baud rate and configure M1421.
-			if err := configureM1421(); err != nil {
-				log.Printf("M1421 configuration failed: %s\n", err.Error())
-				continue
-			}
-
-			log.Printf("M1421 init success.\n")
+			log.Printf("M1421 connected on %s\n", m1421Device)
 			globalStatus.M1421_connected = true
-
-			// Start a goroutine to read Beast frames from the M1421.
-			go m1421SerialPortReader(m1421SerialPort)
+			go m1421Run(port)
 		}
 	}()
 
 	return nil
 }
 
-// detectM1421Device probes common GPIO UART paths to find the M1421.
-// Returns the device path if found, error otherwise.
-func detectM1421Device() (string, error) {
-	for _, devicePath := range m1421UARTPaths {
-		if _, err := os.Stat(devicePath); err != nil {
-			// Device doesn't exist, try next
-			log.Printf("M1421: Device path %s not found\n", devicePath)
-			continue
-		}
-
-		log.Printf("M1421: Found device path %s, probing baud rates...\n", devicePath)
-
-		// Try to probe this UART at common baud rates
-		for _, baud := range m1421BaudRates {
-			config := &serial.Config{Name: devicePath, Baud: baud}
-			port, err := serial.OpenPort(config)
-			if err != nil {
-				log.Printf("M1421: Failed to open %s at %d baud: %v\n", devicePath, baud, err)
-				continue
-			}
-
-			// Send AT probe command
-			if err := sendM1421Command(port, "AT"); err == nil {
-				port.Close()
-				log.Printf("M1421 detected at %s (%d baud)\n", devicePath, baud)
-				return devicePath, nil
-			}
-
-			log.Printf("M1421: AT probe failed at %s:%d\n", devicePath, baud)
-			port.Close()
-		}
+func openM1421() (*serial.Port, error) {
+	port, err := serial.OpenPort(&serial.Config{Name: m1421Device, Baud: m1421Baud})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s: %w", m1421Device, err)
 	}
 
-	return "", fmt.Errorf("M1421 not detected on any GPIO UART")
+	// The programmer negotiates the console baud rate with the module after enumeration and
+	// treats anything received meanwhile as noise, so stay quiet briefly before the first command.
+	time.Sleep(2 * time.Second)
+
+	if err := sendM1421Commands(port); err != nil {
+		port.Close()
+		return nil, err
+	}
+	return port, nil
 }
 
-// configureM1421 attempts to auto-detect the M1421's current baud rate,
-// then configures it to output Beast format at 115200 baud.
-func configureM1421() error {
-	var detectedBaud int
-	var err error
-
-	// Try to detect current baud rate
-	log.Printf("Attempting to detect M1421 baud rate...\n")
-	detectedBaud, err = detectM1421BaudRateOnDevice()
-	if err != nil {
-		log.Printf("Baud rate detection failed: %s, attempting default (%d)\n", err.Error(), M1421_BAUD)
-		detectedBaud = M1421_BAUD
-	} else {
-		log.Printf("Detected M1421 baud rate: %d\n", detectedBaud)
-	}
-
-	// Open port at detected baud rate
-	m1421SerialConfig = &serial.Config{Name: m1421Device, Baud: detectedBaud}
-	port, err := serial.OpenPort(m1421SerialConfig)
-	if err != nil {
-		return fmt.Errorf("failed to open M1421 port at %s: %w", m1421Device, err)
-	}
-	defer port.Close()
-
-	// Send AT commands to query/configure M1421
-	log.Printf("Configuring M1421 (setting output format: %s, baud: %d)...\n", M1421_OUTPUT_FORMAT, M1421_BAUD)
-
-	// Query device info
-	if err := sendM1421Command(port, "AT+I?"); err != nil {
-		log.Printf("Warning: Could not query device info: %s\n", err.Error())
-	}
-
-	// Configure output format to Beast
-	if err := sendM1421Command(port, fmt.Sprintf("AT+OUTPUT=%s", M1421_OUTPUT_FORMAT)); err != nil {
-		log.Printf("Warning: Could not set output format: %s\n", err.Error())
-	}
-
-	// Configure baud rate
-	if detectedBaud != M1421_BAUD {
-		if err := sendM1421Command(port, fmt.Sprintf("AT+BAUD=%d", M1421_BAUD)); err != nil {
-			log.Printf("Warning: Could not set baud rate: %s\n", err.Error())
+func sendM1421Commands(port *serial.Port) error {
+	for _, cmd := range m1421Commands {
+		if _, err := port.Write([]byte(cmd + "\r\n")); err != nil {
+			return fmt.Errorf("failed to send %q: %w", cmd, err)
 		}
-		// Save configuration to flash
-		if err := sendM1421Command(port, "AT&W"); err != nil {
-			log.Printf("Warning: Could not save configuration: %s\n", err.Error())
-		}
-		// Give device time to reset
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
-
-	// Re-open at target baud rate
-	m1421SerialConfig = &serial.Config{Name: m1421Device, Baud: M1421_BAUD}
-	p, err := serial.OpenPort(m1421SerialConfig)
-	if err != nil {
-		return fmt.Errorf("failed to reopen M1421 at target baud rate: %w", err)
-	}
-
-	m1421SerialPort = p
 	return nil
 }
 
-// detectM1421BaudRateOnDevice attempts to probe the M1421 at various baud rates
-// by sending an AT command and looking for a valid response.
-func detectM1421BaudRateOnDevice() (int, error) {
-	for _, baud := range m1421BaudRates {
-		config := &serial.Config{Name: m1421Device, Baud: baud}
-		port, err := serial.OpenPort(config)
-		if err != nil {
-			continue
-		}
-
-		// Try sending AT command
-		success := false
-		if err := sendM1421Command(port, "AT"); err == nil {
-			success = true
-		}
-
-		port.Close()
-
-		if success {
-			return baud, nil
-		}
+func startM1421Dump1090() (*exec.Cmd, net.Conn, error) {
+	cmd := exec.Command(STRATUX_HOME+"/bin/dump1090", "--net-only", "--net-stratux-port", "30006")
+	if err := cmd.Start(); err != nil {
+		return nil, nil, fmt.Errorf("failed to start dump1090: %w", err)
 	}
 
-	return 0, fmt.Errorf("could not detect M1421 baud rate")
+	var lastErr error
+	for i := 0; i < 20; i++ {
+		conn, err := net.Dial("tcp", m1421Dump1090Addr)
+		if err == nil {
+			return cmd, conn, nil
+		}
+		lastErr = err
+		time.Sleep(250 * time.Millisecond)
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	return nil, nil, fmt.Errorf("dump1090 not reachable: %w", lastErr)
 }
 
-// sendM1421Command sends an AT command to the M1421 and waits for a response.
-// Returns nil if "OK" is received, error otherwise.
-func sendM1421Command(port *serial.Port, cmd string) error {
-	cmdWithNewline := cmd + "\r\n"
-	if _, err := port.Write([]byte(cmdWithNewline)); err != nil {
-		return fmt.Errorf("write failed: %w", err)
-	}
-
-	// Read response with simple timeout by attempting reads
-	rdr := bufio.NewReader(port)
-	timeout := time.After(500 * time.Millisecond)
-
-	for i := 0; i < 10; i++ { // Try reading up to 10 lines
-		select {
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for response")
-		default:
-		}
-
-		line, err := rdr.ReadString('\n')
-		if err != nil {
-			continue
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "OK" {
-			return nil
-		}
-		if strings.Contains(line, "ERROR") {
-			return fmt.Errorf("M1421 returned error: %s", line)
-		}
-	}
-
-	return fmt.Errorf("no valid response from M1421")
-}
-
-// m1421SerialPortReader reads Beast-formatted frames from the M1421 serial port.
-// Beast frame format:
-//   - 0x1A (ESC) marks frame start
-//   - 1 byte frame type/length indicator
-//   - Payload (varies by type)
-//   - 0x1A (ESC) marks frame end (or next frame start)
-func m1421SerialPortReader(serialPort *serial.Port) {
+func m1421Run(port *serial.Port) {
 	defer func() {
 		globalStatus.M1421_connected = false
-		serialPort.Close()
+		port.Close()
+		log.Printf("M1421 disconnected\n")
 	}()
 
-	tmpBuf := make([]byte, 4096)
-	var buf []byte
+	dump1090Cmd, dump1090Conn, err := startM1421Dump1090()
+	if err != nil {
+		log.Printf("M1421: %s\n", err.Error())
+		return
+	}
+	defer func() {
+		dump1090Conn.Close()
+		dump1090Cmd.Process.Kill()
+		dump1090Cmd.Wait()
+	}()
 
-	for {
-		n, err := serialPort.Read(tmpBuf)
-		if err != nil {
-			log.Printf("M1421 serial port error, shutting down: %s\n", err.Error())
+	// If the module resets it falls back to its saved reporting protocol, so reassert ours.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(m1421KeepAlive)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				sendM1421Commands(port)
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(port)
+	scanner.Buffer(make([]byte, 0, 4096), 64*1024)
+	for scanner.Scan() && globalSettings.M1421_Enabled {
+		if err := m1421HandleLine(strings.TrimSpace(scanner.Text()), dump1090Conn); err != nil {
+			log.Printf("M1421: %s\n", err.Error())
 			return
 		}
-
-		buf = append(buf, tmpBuf[:n]...)
-
-		// Process complete Beast frames in the buffer
-		for {
-			frame, remaining := extractBeastFrame(buf)
-			if frame == nil {
-				break // No complete frame yet
-			}
-			buf = remaining
-
-			// Process the frame
-			processM1421BeastFrame(frame)
-		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("M1421 serial port error: %s\n", err.Error())
 	}
 }
 
-// extractBeastFrame extracts one Beast frame from the buffer.
-// Returns (frame, remaining buffer) or (nil, buf) if no complete frame.
-func extractBeastFrame(buf []byte) ([]byte, []byte) {
-	if len(buf) < 2 {
-		return nil, buf
-	}
+// m1421HandleLine forwards one RAW line into the Stratux pipeline; all other lines (command replies, logs) are ignored.
+func m1421HandleLine(line string, dump1090Conn net.Conn) error {
+	switch {
+	case strings.HasPrefix(line, "#MDS*"):
+		report, ok := m1421ReportData(line[len("#MDS*"):])
+		if !ok {
+			return nil
+		}
+		globalStatus.ES_messages_total++
+		if _, err := dump1090Conn.Write([]byte("*" + report + ";\r\n")); err != nil {
+			return fmt.Errorf("dump1090 write failed: %w", err)
+		}
 
-	// Find first ESC byte
-	startIdx := -1
-	for i := 0; i < len(buf); i++ {
-		if buf[i] == BEAST_ESC {
-			startIdx = i
-			break
+	case strings.HasPrefix(line, "#UAT*-"):
+		report, ok := m1421ReportData(line[len("#UAT*-"):])
+		if !ok {
+			return nil
+		}
+		// Short reports arrive with their 12 FEC bytes; Stratux expects the 18 byte payload only.
+		if len(report) == 60 {
+			report = report[:36]
+		}
+		if o, msgtype := parseInput("-" + report + ";"); o != nil && msgtype != 0 {
+			relayMessage(msgtype, o)
 		}
 	}
-
-	if startIdx == -1 {
-		// No ESC found, discard buffer
-		return nil, buf[len(buf):]
-	}
-
-	if startIdx > 0 {
-		// Discard bytes before first ESC
-		buf = buf[startIdx:]
-	}
-
-	if len(buf) < 2 {
-		return nil, buf
-	}
-
-	// Frame type is the byte after ESC
-	frameType := buf[1]
-
-	// Determine expected payload length based on frame type
-	var expectedLen int
-	switch frameType {
-	case 0x1A:
-		// Escaped ESC byte (stuffing), not a frame start
-		return nil, buf[1:]
-	case 0x00: // Downlink frame (28 bytes) + ESC + frame type (already 2 bytes)
-		expectedLen = 30
-	case 0x01: // Downlink with DF11 (14 bytes)
-		expectedLen = 16
-	case 0x02: // Uplink frame (14 bytes)
-		expectedLen = 16
-	default:
-		// Unknown frame type, skip this ESC
-		return nil, buf[1:]
-	}
-
-	if len(buf) < expectedLen {
-		// Not enough data yet
-		return nil, buf
-	}
-
-	// Extract frame (including ESC markers)
-	frame := buf[:expectedLen]
-	remaining := buf[expectedLen:]
-
-	return frame, remaining
+	// "#UAT*+" uplinks (FIS-B) are not handled yet: RAW carries them interleaved and uncorrected.
+	return nil
 }
 
-// processM1421BeastFrame processes a Beast-formatted ADS-B frame from the M1421.
-func processM1421BeastFrame(frame []byte) {
-	if len(frame) < 2 {
-		return
+// m1421ReportData returns the hex payload up to the ';' that precedes the metadata tuple.
+func m1421ReportData(s string) (string, bool) {
+	end := strings.IndexByte(s, ';')
+	if end <= 0 {
+		return "", false
 	}
-
-	// Beast frame: ESC + type + payload + ESC (payload last byte is often the ESC)
-	// Extract the message payload (skip ESC at start and type byte)
-	frameType := frame[1]
-
-	var msgLen int
-	var msgStart int
-
-	switch frameType {
-	case 0x00: // DF0-4 or DF16-18 (long frame, 28 bytes + TS/RSSI)
-		msgStart = 2
-		msgLen = 14 // Standard ADS-B message is 14 bytes for long frame (84 bits / 8)
-		// Note: Actual Beast payload is longer; extract just the message
-		if len(frame) >= 30 {
-			msgLen = 14
-		}
-	case 0x01: // DF11 or DF18 (short frame, 14 bytes)
-		msgStart = 2
-		msgLen = 7 // Short frame is 7 bytes
-	case 0x02: // Uplink (14 bytes)
-		msgStart = 2
-		msgLen = 7
-	default:
-		log.Printf("Unknown Beast frame type: 0x%02x\n", frameType)
-		return
-	}
-
-	if len(frame) < msgStart+msgLen {
-		log.Printf("Beast frame too short for type 0x%02x\n", frameType)
-		return
-	}
-
-	// Extract message and signal strength
-	message := frame[msgStart : msgStart+msgLen]
-	var rssi int8 = -50 // Default RSSI; may be encoded in frame
-
-	// Extract RSSI if present (usually after message in Beast format)
-	if len(frame) > msgStart+msgLen {
-		// Try to extract RSSI from the message
-		// In typical Beast mode: last 2 bytes may be TS/RSSI
-		rssi = int8(frame[len(frame)-1])
-	}
-
-	// Format as ADS-B message for relay
-	// Use "-" prefix for downlink (ADS-B), "+" for uplink
-	msgPrefix := "-"
-	if frameType == 0x02 {
-		msgPrefix = "+"
-	}
-
-	msgHex := hex.EncodeToString(message)
-	toRelay := fmt.Sprintf("%s%s;ss=%d;", msgPrefix, msgHex, rssi)
-
-	// Parse and relay through Stratux pipeline
-	o, msgtype := parseInput(toRelay)
-	if o != nil && msgtype != 0 {
-		relayMessage(msgtype, o)
-	}
+	return s[:end], true
 }

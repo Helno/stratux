@@ -1040,7 +1040,7 @@ func parseDownlinkReport(s string, signalLevel int) {
 
 func esListen() {
 	for {
-		if !globalSettings.ES_Enabled && !globalSettings.Ping_Enabled && !globalSettings.Pong_Enabled {
+		if !globalSettings.ES_Enabled && !globalSettings.Ping_Enabled && !globalSettings.Pong_Enabled && !globalSettings.M1421_Enabled {
 			time.Sleep(1 * time.Second) // Don't do much unless ES is actually enabled.
 			continue
 		}
@@ -1052,7 +1052,7 @@ func esListen() {
 			continue
 		}
 		rdr := bufio.NewReader(inConn)
-		for globalSettings.ES_Enabled || globalSettings.Ping_Enabled {
+		for globalSettings.ES_Enabled || globalSettings.Ping_Enabled || globalSettings.M1421_Enabled {
 			buf, err := rdr.ReadString('\n')
 			if err != nil { // Must have disconnected?
 				break
@@ -1086,7 +1086,7 @@ func parseDump1090Message(buf string) {
 	eslog.Data = buf
 	logESMsg(eslog) // log raw dump1090:30006 output to SQLite log
 	// Only increment if using an SDR for 1090 traffic
-	if !globalSettings.Ping_Enabled  && !globalSettings.Pong_Enabled {
+	if !globalSettings.Ping_Enabled && !globalSettings.Pong_Enabled && !globalSettings.M1421_Enabled {
 		globalStatus.ES_messages_total++
 	}
 	var newTi *dump1090Data

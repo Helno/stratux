@@ -1,0 +1,2 @@
+# ADSBee 1421 Programmer (USB CDC serial bridge to an ADSBee 1421 / m1421 ADS-B receiver)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", ATTRS{product}=="ADSBee 1421 Programmer", OWNER="root", MODE="0666", SYMLINK+="adsbee1421", ENV{ID_MM_DEVICE_IGNORE}="1"
