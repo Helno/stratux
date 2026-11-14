@@ -2,35 +2,70 @@ package main
 
 import (
 	"bufio"
-	"context"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/stratux/serial"
+	"github.com/stratux/stratux/common"
 )
 
-var m1421SerialPort *serial.Port
-var m1421SerialConfig *serial.Config
-var m1421Device string // Will be set during auto-detection
+/*
+	m1421.go: ADSBee 1421 dual-band (1090ES + 978 UAT) receiver, connected over USB through the
+	ADSBee 1421 Programmer (a USB CDC serial bridge, udev symlink /dev/adsbee1421).
 
-const M1421_BAUD = 115200
-const M1421_OUTPUT_FORMAT = "beast" // Beast binary format
-const BEAST_ESC = 0x1A
+	The module's console runs at a fixed 1,000,000 baud (changing it can break the programmer bridge).
+	We select the AIRCRAFT_JSON_UAT_UPLINK reporting protocol (firmware 0.3.11-rc6 or newer), which emits
+	one JSON object per line:
+		{"hex":"a63993","type":"adsb_icao","link":"1090","lat":..,"lon":..,"alt_baro":..,...}   tracked aircraft
+		{"uat_uplink":"<576 base64 chars>","rssi":-80,"t":123456}                               978 uplink (FIS-B)
+	Aircraft are already decoded by the module. Uplinks are the de-interleaved, error-corrected 432 byte
+	payload, exactly what Stratux expects from dump978.
+*/
 
-// Common GPIO UART device paths to probe (in order of preference)
-var m1421UARTPaths = []string{
-	"/dev/ttyAMA0", // Primary UART on Pi 3/4/5
-	"/dev/ttyS0",   // Alternative naming
-	"/dev/serial0", // Symlink to primary UART
-	"/dev/serial1", // Secondary UART (if available)
+const (
+	m1421Device      = "/dev/adsbee1421"
+	m1421Baud        = 1000000
+	m1421KeepAlive   = 30 * time.Second
+	m1421RSSIUnknown = -32768
+)
+
+var m1421Commands = []string{
+	"AT+LOG_LEVEL=SILENT",
+	"AT+PROTOCOL_OUT=CONSOLE,AIRCRAFT_JSON_UAT_UPLINK",
 }
 
-// Supported baud rates for auto-detection
-var m1421BaudRates = []int{9600, 19200, 38400, 57600, 115200, 230400, 460800}
+type m1421Message struct {
+	UATUplink string `json:"uat_uplink"`
+
+	Hex         string          `json:"hex"`
+	Type        string          `json:"type"`
+	Link        string          `json:"link"`
+	Flight      *string         `json:"flight"`
+	Squawk      *string         `json:"squawk"`
+	Category    *string         `json:"category"`
+	Lat         *float64        `json:"lat"`
+	Lon         *float64        `json:"lon"`
+	AltBaro     json.RawMessage `json:"alt_baro"`
+	AltGeom     *int            `json:"alt_geom"`
+	GS          *float64        `json:"gs"`
+	Track       *float64        `json:"track"`
+	TrueHeading *float64        `json:"true_heading"`
+	BaroRate    *int            `json:"baro_rate"`
+	GeomRate    *int            `json:"geom_rate"`
+	NIC         *int            `json:"nic"`
+	NACp        *int            `json:"nac_p"`
+	Emergency   *string         `json:"emergency"`
+	OnGround    *int            `json:"on_ground"`
+	RSSI        *int            `json:"rssi"`
+	SeenPos     *float64        `json:"seen_pos"`
+}
 
 func initM1421Serial(isTraceReplayMode bool) error {
 	if isTraceReplayMode {
@@ -38,387 +73,329 @@ func initM1421Serial(isTraceReplayMode bool) error {
 	}
 
 	go func() {
-		log.Printf("M1421 watcher goroutine started\n")
-		watchTicker := time.NewTicker(2 * time.Second)
 		for {
-			<-watchTicker.C
+			time.Sleep(2 * time.Second)
 
-			// Watch for M1421 being enabled.
 			if !globalSettings.M1421_Enabled || globalStatus.M1421_connected {
-				// M1421 not enabled or already connected.
+				continue
+			}
+			if _, err := os.Stat(m1421Device); err != nil {
 				continue
 			}
 
-			log.Printf("M1421 watcher: M1421_Enabled=%v, M1421_connected=%v - attempting detection\n", globalSettings.M1421_Enabled, globalStatus.M1421_connected)
-
-			// Auto-detect M1421 on GPIO UART
-			device, err := detectM1421Device()
+			port, err := openM1421()
 			if err != nil {
-				// Device not detected yet, continue trying
-				log.Printf("M1421 detection attempt failed: %v\n", err)
+				log.Printf("M1421: %s\n", err.Error())
 				continue
 			}
 
-			m1421Device = device
-			log.Printf("===== M1421 Device found at %s =====\n", m1421Device)
-
-			// Attempt to detect baud rate and configure M1421.
-			if err := configureM1421(); err != nil {
-				log.Printf("M1421 configuration failed: %s\n", err.Error())
-				continue
-			}
-
-			log.Printf("M1421 init success.\n")
+			log.Printf("M1421 connected on %s\n", m1421Device)
 			globalStatus.M1421_connected = true
-
-			// Start a goroutine to read Beast frames from the M1421.
-			go m1421SerialPortReader(m1421SerialPort)
+			go m1421Run(port)
 		}
 	}()
 
 	return nil
 }
 
-// detectM1421Device probes common GPIO UART paths to find the M1421.
-// Returns the device path if found, error otherwise.
-func detectM1421Device() (string, error) {
-	// Add 10-second timeout to entire detection attempt
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	for _, devicePath := range m1421UARTPaths {
-		// Check if context has timed out
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("M1421 detection timeout")
-		default:
-		}
-
-		if _, err := os.Stat(devicePath); err != nil {
-			// Device doesn't exist, try next
-			log.Printf("M1421: Device path %s not found\n", devicePath)
-			continue
-		}
-
-		log.Printf("M1421: Found device path %s, probing baud rates...\n", devicePath)
-
-		// Try to probe this UART at common baud rates
-		for _, baud := range m1421BaudRates {
-			// Check if context has timed out
-			select {
-			case <-ctx.Done():
-				log.Printf("M1421: Detection timeout while probing %s\n", devicePath)
-				return "", fmt.Errorf("M1421 detection timeout")
-			default:
-			}
-
-			log.Printf("M1421: Trying %s at %d baud...\n", devicePath, baud)
-			config := &serial.Config{Name: devicePath, Baud: baud, ReadTimeout: 100 * time.Millisecond}
-			port, err := serial.OpenPort(config)
-			if err != nil {
-				log.Printf("M1421: Failed to open %s at %d baud: %v\n", devicePath, baud, err)
-				continue
-			}
-
-			// Send AT probe command
-			if err := sendM1421Command(port, "AT"); err == nil {
-				port.Close()
-				log.Printf("M1421 detected at %s (%d baud)\n", devicePath, baud)
-				return devicePath, nil
-			}
-
-			log.Printf("M1421: AT probe failed at %s:%d\n", devicePath, baud)
-			port.Close()
-		}
+func openM1421() (*serial.Port, error) {
+	port, err := serial.OpenPort(&serial.Config{Name: m1421Device, Baud: m1421Baud})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s: %w", m1421Device, err)
 	}
 
-	return "", fmt.Errorf("M1421 not detected on any GPIO UART")
+	// The programmer negotiates the console baud rate with the module after enumeration and
+	// treats anything received meanwhile as noise, so stay quiet briefly before the first command.
+	time.Sleep(2 * time.Second)
+
+	if err := sendM1421Commands(port); err != nil {
+		port.Close()
+		return nil, err
+	}
+	return port, nil
 }
 
-// configureM1421 attempts to auto-detect the M1421's current baud rate,
-// then configures it to output Beast format at 115200 baud.
-func configureM1421() error {
-	var detectedBaud int
-	var err error
-
-	// Try to detect current baud rate
-	log.Printf("Attempting to detect M1421 baud rate...\n")
-	detectedBaud, err = detectM1421BaudRateOnDevice()
-	if err != nil {
-		log.Printf("Baud rate detection failed: %s, attempting default (%d)\n", err.Error(), M1421_BAUD)
-		detectedBaud = M1421_BAUD
-	} else {
-		log.Printf("Detected M1421 baud rate: %d\n", detectedBaud)
-	}
-
-	// Open port at detected baud rate
-	m1421SerialConfig = &serial.Config{Name: m1421Device, Baud: detectedBaud}
-	port, err := serial.OpenPort(m1421SerialConfig)
-	if err != nil {
-		return fmt.Errorf("failed to open M1421 port at %s: %w", m1421Device, err)
-	}
-	defer port.Close()
-
-	// Send AT commands to query/configure M1421
-	log.Printf("Configuring M1421 (setting output format: %s, baud: %d)...\n", M1421_OUTPUT_FORMAT, M1421_BAUD)
-
-	// Query device info
-	if err := sendM1421Command(port, "AT+I?"); err != nil {
-		log.Printf("Warning: Could not query device info: %s\n", err.Error())
-	}
-
-	// Configure output format to Beast
-	if err := sendM1421Command(port, fmt.Sprintf("AT+OUTPUT=%s", M1421_OUTPUT_FORMAT)); err != nil {
-		log.Printf("Warning: Could not set output format: %s\n", err.Error())
-	}
-
-	// Configure baud rate
-	if detectedBaud != M1421_BAUD {
-		if err := sendM1421Command(port, fmt.Sprintf("AT+BAUD=%d", M1421_BAUD)); err != nil {
-			log.Printf("Warning: Could not set baud rate: %s\n", err.Error())
+func sendM1421Commands(port *serial.Port) error {
+	for _, cmd := range m1421Commands {
+		if _, err := port.Write([]byte(cmd + "\r\n")); err != nil {
+			return fmt.Errorf("failed to send %q: %w", cmd, err)
 		}
-		// Save configuration to flash
-		if err := sendM1421Command(port, "AT&W"); err != nil {
-			log.Printf("Warning: Could not save configuration: %s\n", err.Error())
-		}
-		// Give device time to reset
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
-
-	// Re-open at target baud rate
-	m1421SerialConfig = &serial.Config{Name: m1421Device, Baud: M1421_BAUD}
-	p, err := serial.OpenPort(m1421SerialConfig)
-	if err != nil {
-		return fmt.Errorf("failed to reopen M1421 at target baud rate: %w", err)
-	}
-
-	m1421SerialPort = p
 	return nil
 }
 
-// detectM1421BaudRateOnDevice attempts to probe the M1421 at various baud rates
-// by sending an AT command and looking for a valid response.
-func detectM1421BaudRateOnDevice() (int, error) {
-	for _, baud := range m1421BaudRates {
-		config := &serial.Config{Name: m1421Device, Baud: baud}
-		port, err := serial.OpenPort(config)
-		if err != nil {
-			continue
-		}
-
-		// Try sending AT command
-		success := false
-		if err := sendM1421Command(port, "AT"); err == nil {
-			success = true
-		}
-
-		port.Close()
-
-		if success {
-			return baud, nil
-		}
-	}
-
-	return 0, fmt.Errorf("could not detect M1421 baud rate")
-}
-
-// sendM1421Command sends an AT command to the M1421 and waits for a response.
-// Returns nil if "OK" is received, error otherwise.
-func sendM1421Command(port *serial.Port, cmd string) error {
-	cmdWithNewline := cmd + "\r\n"
-	if _, err := port.Write([]byte(cmdWithNewline)); err != nil {
-		return fmt.Errorf("write failed: %w", err)
-	}
-
-	// Read response with simple timeout by attempting reads
-	rdr := bufio.NewReader(port)
-	timeout := time.After(500 * time.Millisecond)
-
-	for i := 0; i < 10; i++ { // Try reading up to 10 lines
-		select {
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for response")
-		default:
-		}
-
-		line, err := rdr.ReadString('\n')
-		if err != nil {
-			continue
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "OK" {
-			return nil
-		}
-		if strings.Contains(line, "ERROR") {
-			return fmt.Errorf("M1421 returned error: %s", line)
-		}
-	}
-
-	return fmt.Errorf("no valid response from M1421")
-}
-
-// m1421SerialPortReader reads Beast-formatted frames from the M1421 serial port.
-// Beast frame format:
-//   - 0x1A (ESC) marks frame start
-//   - 1 byte frame type/length indicator
-//   - Payload (varies by type)
-//   - 0x1A (ESC) marks frame end (or next frame start)
-func m1421SerialPortReader(serialPort *serial.Port) {
+func m1421Run(port *serial.Port) {
 	defer func() {
 		globalStatus.M1421_connected = false
-		serialPort.Close()
+		port.Close()
+		log.Printf("M1421 disconnected\n")
 	}()
 
-	tmpBuf := make([]byte, 4096)
-	var buf []byte
-
-	for {
-		n, err := serialPort.Read(tmpBuf)
-		if err != nil {
-			log.Printf("M1421 serial port error, shutting down: %s\n", err.Error())
-			return
-		}
-
-		buf = append(buf, tmpBuf[:n]...)
-
-		// Process complete Beast frames in the buffer
+	// If the module resets it falls back to its saved reporting protocol, so reassert ours.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(m1421KeepAlive)
+		defer ticker.Stop()
 		for {
-			frame, remaining := extractBeastFrame(buf)
-			if frame == nil {
-				break // No complete frame yet
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				sendM1421Commands(port)
 			}
-			buf = remaining
-
-			// Process the frame
-			processM1421BeastFrame(frame)
 		}
+	}()
+
+	scanner := bufio.NewScanner(port)
+	scanner.Buffer(make([]byte, 0, 4096), 64*1024)
+	for scanner.Scan() && globalSettings.M1421_Enabled {
+		m1421HandleLine(strings.TrimSpace(scanner.Text()))
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("M1421 serial port error: %s\n", err.Error())
 	}
 }
 
-// extractBeastFrame extracts one Beast frame from the buffer.
-// Returns (frame, remaining buffer) or (nil, buf) if no complete frame.
-func extractBeastFrame(buf []byte) ([]byte, []byte) {
-	if len(buf) < 2 {
-		return nil, buf
+// m1421HandleLine processes one console line; command replies and anything that isn't JSON are ignored.
+func m1421HandleLine(line string) {
+	if len(line) == 0 || line[0] != '{' {
+		return
+	}
+	var m m1421Message
+	if err := json.Unmarshal([]byte(line), &m); err != nil {
+		return
 	}
 
-	// Find first ESC byte
-	startIdx := -1
-	for i := 0; i < len(buf); i++ {
-		if buf[i] == BEAST_ESC {
-			startIdx = i
-			break
-		}
+	if m.UATUplink != "" {
+		m1421HandleUplink(m.UATUplink)
+	} else if m.Hex != "" {
+		m1421HandleAircraft(&m)
 	}
-
-	if startIdx == -1 {
-		// No ESC found, discard buffer
-		return nil, buf[len(buf):]
-	}
-
-	if startIdx > 0 {
-		// Discard bytes before first ESC
-		buf = buf[startIdx:]
-	}
-
-	if len(buf) < 2 {
-		return nil, buf
-	}
-
-	// Frame type is the byte after ESC
-	frameType := buf[1]
-
-	// Determine expected payload length based on frame type
-	var expectedLen int
-	switch frameType {
-	case 0x1A:
-		// Escaped ESC byte (stuffing), not a frame start
-		return nil, buf[1:]
-	case 0x00: // Downlink frame (28 bytes) + ESC + frame type (already 2 bytes)
-		expectedLen = 30
-	case 0x01: // Downlink with DF11 (14 bytes)
-		expectedLen = 16
-	case 0x02: // Uplink frame (14 bytes)
-		expectedLen = 16
-	default:
-		// Unknown frame type, skip this ESC
-		return nil, buf[1:]
-	}
-
-	if len(buf) < expectedLen {
-		// Not enough data yet
-		return nil, buf
-	}
-
-	// Extract frame (including ESC markers)
-	frame := buf[:expectedLen]
-	remaining := buf[expectedLen:]
-
-	return frame, remaining
 }
 
-// processM1421BeastFrame processes a Beast-formatted ADS-B frame from the M1421.
-func processM1421BeastFrame(frame []byte) {
-	if len(frame) < 2 {
+func m1421HandleUplink(b64 string) {
+	frame, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil || len(frame) != UPLINK_FRAME_DATA_BYTES {
 		return
 	}
-
-	// Beast frame: ESC + type + payload + ESC (payload last byte is often the ESC)
-	// Extract the message payload (skip ESC at start and type byte)
-	frameType := frame[1]
-
-	var msgLen int
-	var msgStart int
-
-	switch frameType {
-	case 0x00: // DF0-4 or DF16-18 (long frame, 28 bytes + TS/RSSI)
-		msgStart = 2
-		msgLen = 14 // Standard ADS-B message is 14 bytes for long frame (84 bits / 8)
-		// Note: Actual Beast payload is longer; extract just the message
-		if len(frame) >= 30 {
-			msgLen = 14
-		}
-	case 0x01: // DF11 or DF18 (short frame, 14 bytes)
-		msgStart = 2
-		msgLen = 7 // Short frame is 7 bytes
-	case 0x02: // Uplink (14 bytes)
-		msgStart = 2
-		msgLen = 7
-	default:
-		log.Printf("Unknown Beast frame type: 0x%02x\n", frameType)
-		return
-	}
-
-	if len(frame) < msgStart+msgLen {
-		log.Printf("Beast frame too short for type 0x%02x\n", frameType)
-		return
-	}
-
-	// Extract message and signal strength
-	message := frame[msgStart : msgStart+msgLen]
-	var rssi int8 = -50 // Default RSSI; may be encoded in frame
-
-	// Extract RSSI if present (usually after message in Beast format)
-	if len(frame) > msgStart+msgLen {
-		// Try to extract RSSI from the message
-		// In typical Beast mode: last 2 bytes may be TS/RSSI
-		rssi = int8(frame[len(frame)-1])
-	}
-
-	// Format as ADS-B message for relay
-	// Use "-" prefix for downlink (ADS-B), "+" for uplink
-	msgPrefix := "-"
-	if frameType == 0x02 {
-		msgPrefix = "+"
-	}
-
-	msgHex := hex.EncodeToString(message)
-	toRelay := fmt.Sprintf("%s%s;ss=%d;", msgPrefix, msgHex, rssi)
-
-	// Parse and relay through Stratux pipeline
-	o, msgtype := parseInput(toRelay)
-	if o != nil && msgtype != 0 {
+	if o, msgtype := parseInput("+" + hex.EncodeToString(frame) + ";"); o != nil && msgtype != 0 {
 		relayMessage(msgtype, o)
 	}
+}
+
+func m1421HandleAircraft(m *m1421Message) {
+	hexStr := strings.TrimPrefix(m.Hex, "~")
+	addr, err := strconv.ParseUint(hexStr, 16, 32)
+	if err != nil || addr > 0xFFFFFF {
+		return
+	}
+	icao := uint32(addr)
+	is978 := m.Link == "978"
+	if is978 {
+		globalStatus.UAT_messages_total++
+	} else {
+		globalStatus.ES_messages_total++
+	}
+
+	trafficMutex.Lock()
+	defer trafficMutex.Unlock()
+
+	ti, ok := traffic[icao]
+	if !ok {
+		ti.Last_seen = stratuxClock.Time
+		ti.Last_alt = stratuxClock.Time
+		ti.Icao_addr = icao
+		if reg, valid := icao2reg(icao); valid {
+			ti.Reg = reg
+			ti.Tail = reg
+		}
+	}
+	m1421UpdateTraffic(&ti, m, is978)
+
+	postProcessTraffic(&ti)
+	traffic[icao] = ti
+	registerTrafficUpdate(ti)
+	seenTraffic[icao] = true
+}
+
+func m1421UpdateTraffic(ti *TrafficInfo, m *m1421Message, is978 bool) {
+	now := stratuxClock.Time
+
+	ti.TargetType, ti.Addr_type = m1421TargetType(m.Type)
+	if m.Type != "mode_s" {
+		if is978 {
+			ti.Last_source = TRAFFIC_SOURCE_UAT
+		} else {
+			ti.Last_source = TRAFFIC_SOURCE_1090ES
+		}
+	}
+
+	if m.RSSI != nil && *m.RSSI != m1421RSSIUnknown {
+		ti.SignalLevel = float64(*m.RSSI)
+	} else {
+		ti.SignalLevel = -999
+	}
+
+	onGround := m.OnGround != nil && *m.OnGround == 1
+
+	// alt_baro is an integer, or the string "ground" in readsb output.
+	baroValid := false
+	var baro int
+	if len(m.AltBaro) > 0 {
+		if err := json.Unmarshal(m.AltBaro, &baro); err == nil {
+			baroValid = true
+		} else if string(m.AltBaro) == `"ground"` {
+			onGround = true
+		}
+	}
+	if baroValid {
+		ti.Alt = int32(baro)
+		ti.AltIsGNSS = false
+		ti.Last_alt = now
+		if m.AltGeom != nil {
+			ti.GnssDiffFromBaroAlt = int32(*m.AltGeom - baro)
+			ti.Last_GnssDiff = now
+			ti.Last_GnssDiffAlt = ti.Alt
+		}
+	} else if m.AltGeom != nil {
+		ti.Alt = int32(*m.AltGeom)
+		ti.AltIsGNSS = true
+		ti.Last_alt = now
+	}
+	ti.OnGround = onGround
+
+	if m.Lat != nil && m.Lon != nil && (*m.Lat != 0 || *m.Lon != 0) {
+		ti.Lat = float32(*m.Lat)
+		ti.Lng = float32(*m.Lon)
+		ti.Position_valid = true
+		if isGPSValid() {
+			ti.Distance, ti.Bearing = common.Distance(float64(mySituation.GPSLatitude), float64(mySituation.GPSLongitude), float64(ti.Lat), float64(ti.Lng))
+			ti.BearingDist_valid = true
+		}
+		// The module repeats the last known position with every update, so only a recent one counts as seen.
+		if m.SeenPos == nil || *m.SeenPos <= 2 {
+			ti.ExtrapolatedPosition = false
+			ti.Last_seen = now
+		}
+	} else if !ti.Position_valid {
+		ti.Last_seen = ti.Last_alt
+	}
+
+	track := m.Track
+	if track == nil {
+		track = m.TrueHeading
+	}
+	if m.GS != nil && track != nil {
+		ti.Speed = uint16(*m.GS)
+		ti.Track = float32(*track)
+		ti.Speed_valid = true
+		ti.Last_speed = now
+	}
+	if m.BaroRate != nil {
+		ti.Vvel = int16(*m.BaroRate)
+	} else if m.GeomRate != nil {
+		ti.Vvel = int16(*m.GeomRate)
+	}
+
+	if m.NIC != nil {
+		ti.NIC = *m.NIC
+	}
+	if m.NACp != nil {
+		ti.NACp = *m.NACp
+	}
+	if m.Category != nil {
+		ti.Emitter_category = m1421EmitterCategory(*m.Category)
+	}
+	if m.Squawk != nil {
+		if sq, err := strconv.Atoi(*m.Squawk); err == nil {
+			ti.Squawk = sq
+		}
+	}
+	if m.Emergency != nil {
+		ti.PriorityStatus = m1421PriorityStatus(*m.Emergency)
+	}
+	if m.Flight != nil {
+		if tail := strings.TrimSpace(*m.Flight); tail != "" {
+			ti.Tail = tail
+		}
+	}
+	if globalSettings.DisplayTrafficSource {
+		ti.Tail = m1421TailWithSource(ti.Tail, ti.TargetType, is978)
+	}
+
+	ti.Timestamp = time.Now()
+}
+
+// m1421TargetType maps the module's aircraft type to a Stratux target type and a GDL90 address type.
+func m1421TargetType(t string) (uint8, uint8) {
+	switch t {
+	case "adsb_icao", "adsb_icao_nt":
+		return TARGET_TYPE_ADSB, 0
+	case "adsb_other":
+		return TARGET_TYPE_ADSB, 1
+	case "tisb_icao":
+		return TARGET_TYPE_TISB, 2
+	case "tisb_trackfile", "tisb_other":
+		return TARGET_TYPE_TISB, 3
+	case "adsr_icao", "adsr_other":
+		return TARGET_TYPE_ADSR, 6
+	}
+	return TARGET_TYPE_MODE_S, 0
+}
+
+// m1421EmitterCategory converts readsb "A0".."D7" to the GDL90 emitter category (A7 = 0x07, B0 = 0x08, ...).
+func m1421EmitterCategory(c string) uint8 {
+	if len(c) != 2 || c[0] < 'A' || c[0] > 'D' || c[1] < '0' || c[1] > '7' {
+		return 0
+	}
+	return (c[0]-'A')*8 + (c[1] - '0')
+}
+
+// m1421PriorityStatus converts the UAT emergency string to the GDL90 emergency/priority code.
+func m1421PriorityStatus(e string) uint8 {
+	switch e {
+	case "general":
+		return 1
+	case "lifeguard":
+		return 2
+	case "minfuel":
+		return 3
+	case "nordo":
+		return 4
+	case "unlawful":
+		return 5
+	case "downed":
+		return 6
+	}
+	return 0
+}
+
+// m1421TailWithSource prefixes the callsign with the source (e = 1090ES, u = UAT) and target type, as the other receivers do.
+func m1421TailWithSource(tail string, targetType uint8, is978 bool) string {
+	prefix := "e"
+	if is978 {
+		prefix = "u"
+	}
+	typeCode := " "
+	switch targetType {
+	case TARGET_TYPE_ADSB:
+		typeCode = "a"
+	case TARGET_TYPE_ADSR:
+		typeCode = "r"
+	case TARGET_TYPE_TISB:
+		typeCode = "t"
+	}
+	switch {
+	case len(tail) == 0:
+		return prefix + typeCode
+	case len(tail) < 7 && tail[0] != 'e' && tail[0] != 'u':
+		return prefix + typeCode + tail
+	case len(tail) == 7 && tail[0] != 'e' && tail[0] != 'u':
+		return prefix + typeCode + tail[1:]
+	case len(tail) > 1:
+		return prefix + typeCode + tail[2:]
+	}
+	return tail
 }

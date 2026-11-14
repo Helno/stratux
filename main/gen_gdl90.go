@@ -594,6 +594,11 @@ func makeStratuxStatus() []byte {
 		msg[13] = msg[13] | (1 << 5) | (1 << 6)
 	}
 
+	// M1421 provides ES and UAT
+	if globalSettings.M1421_Enabled {
+		msg[13] = msg[13] | (1 << 5) | (1 << 6)
+	}
+
 	// Valid/Enabled: GPS Enabled portion.
 	if globalSettings.GPS_Enabled {
 		msg[13] = msg[13] | (1 << 7)
