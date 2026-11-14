@@ -251,6 +251,10 @@ function StatusCtrl($rootScope, $scope, $state, $http, $interval, craftService) 
 				$scope.visible_uat = true;
 				$scope.visible_es = true;
 			}
+			if (settings.M1421_Enabled) {
+				$scope.visible_uat = true;
+				$scope.visible_es = true;
+			}
 			$scope.visible_gps = settings.GPS_Enabled;
 		}, function (response) {
 			// nop

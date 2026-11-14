@@ -833,6 +833,7 @@ func sdrWatcher() {
 	prevOGNEnabled := false
 	prevAISEnabled := false
 	prevOGNTXEnabled := false
+	prevM1421Enabled := false
 	prevdump1090Gain := globalSettings.Dump1090Gain
 
 	// Get the system (RPi) uptime.
@@ -912,6 +913,7 @@ func sdrWatcher() {
 		ognEnabled := globalSettings.OGN_Enabled
 		aisEnabled := globalSettings.AIS_Enabled
 		ognTXEnabled := globalSettings.OGNI2CTXEnabled
+		m1421Enabled := globalSettings.M1421_Enabled
 		dump1090Gain := globalSettings.Dump1090Gain
 		count := rtl.GetDeviceCount()
 		interfaceCount := count
@@ -926,7 +928,7 @@ func sdrWatcher() {
 		}
 
 		if interfaceCount == prevCount && prevESEnabled == esEnabled && prevUATEnabled == uatEnabled && prevOGNEnabled == ognEnabled && prevAISEnabled == aisEnabled &&
-			prevOGNTXEnabled == ognTXEnabled  && prevdump1090Gain == dump1090Gain {
+			prevOGNTXEnabled == ognTXEnabled && prevM1421Enabled == m1421Enabled && prevdump1090Gain == dump1090Gain {
 			continue
 		}
 
@@ -955,6 +957,7 @@ func sdrWatcher() {
 		prevOGNEnabled = ognEnabled
 		prevAISEnabled = aisEnabled
 		prevOGNTXEnabled = ognTXEnabled
+		prevM1421Enabled = m1421Enabled
 		prevdump1090Gain = dump1090Gain
 
 		countEnabled := 0
@@ -963,7 +966,12 @@ func sdrWatcher() {
 		if esEnabled { countEnabled++ }
 		if ognEnabled { countEnabled++ }
 		if aisEnabled { countEnabled++ }
-		if countEnabled > interfaceCount {
+		// The M1421 receives both 1090ES and UAT by itself
+		receivers := interfaceCount
+		if m1421Enabled {
+			receivers += 2
+		}
+		if countEnabled > receivers {
 			// User enabled too many protocols. Show error..
 			used := make([]string, 0)
 			if UATDev != nil { used = append(used, "UAT") }

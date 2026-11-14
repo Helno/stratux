@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 
 const (
 	m1421Device      = "/dev/adsbee1421"
+	m1421DeviceGlob  = "/dev/serial/by-id/usb-ADSBee_ADSBee_1421_Programmer_*"
 	m1421Baud        = 1000000
 	m1421KeepAlive   = 30 * time.Second
 	m1421RSSIUnknown = -32768
@@ -79,17 +81,18 @@ func initM1421Serial(isTraceReplayMode bool) error {
 			if !globalSettings.M1421_Enabled || globalStatus.M1421_connected {
 				continue
 			}
-			if _, err := os.Stat(m1421Device); err != nil {
+			path := m1421FindDevice()
+			if path == "" {
 				continue
 			}
 
-			port, err := openM1421()
+			port, err := openM1421(path)
 			if err != nil {
 				log.Printf("M1421: %s\n", err.Error())
 				continue
 			}
 
-			log.Printf("M1421 connected on %s\n", m1421Device)
+			log.Printf("M1421 connected on %s\n", path)
 			globalStatus.M1421_connected = true
 			go m1421Run(port)
 		}
@@ -98,10 +101,21 @@ func initM1421Serial(isTraceReplayMode bool) error {
 	return nil
 }
 
-func openM1421() (*serial.Port, error) {
-	port, err := serial.OpenPort(&serial.Config{Name: m1421Device, Baud: m1421Baud})
+// m1421FindDevice returns the udev symlink, or the by-id path if the symlink was not created.
+func m1421FindDevice() string {
+	if _, err := os.Stat(m1421Device); err == nil {
+		return m1421Device
+	}
+	if matches, _ := filepath.Glob(m1421DeviceGlob); len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
+}
+
+func openM1421(path string) (*serial.Port, error) {
+	port, err := serial.OpenPort(&serial.Config{Name: path, Baud: m1421Baud})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", m1421Device, err)
+		return nil, fmt.Errorf("failed to open %s: %w", path, err)
 	}
 
 	// The programmer negotiates the console baud rate with the module after enumeration and
@@ -150,7 +164,16 @@ func m1421Run(port *serial.Port) {
 
 	scanner := bufio.NewScanner(port)
 	scanner.Buffer(make([]byte, 0, 4096), 64*1024)
+	lines := 0
 	for scanner.Scan() && globalSettings.M1421_Enabled {
+		line := strings.TrimSpace(scanner.Text())
+		if lines < 5 && len(line) > 0 {
+			lines++
+			if len(line) > 200 {
+				line = line[:200]
+			}
+			log.Printf("M1421 rx: %s\n", line)
+		}
 		m1421HandleLine(strings.TrimSpace(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
@@ -165,6 +188,7 @@ func m1421HandleLine(line string) {
 	}
 	var m m1421Message
 	if err := json.Unmarshal([]byte(line), &m); err != nil {
+		log.Printf("M1421: bad JSON line: %s\n", err.Error())
 		return
 	}
 
