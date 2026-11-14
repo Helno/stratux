@@ -147,56 +147,88 @@ func m1421Run(port *serial.Port) {
 	}()
 
 	// If the module resets it falls back to its saved reporting protocol, so reassert ours.
+	// Closing the port when the toggle is turned off also unblocks the reader below.
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
-		ticker := time.NewTicker(m1421KeepAlive)
+		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
+		last := time.Now()
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				sendM1421Commands(port)
+				if !globalSettings.M1421_Enabled {
+					port.Close()
+					return
+				}
+				if time.Since(last) >= m1421KeepAlive {
+					last = time.Now()
+					sendM1421Commands(port)
+				}
 			}
 		}
 	}()
 
+	counts := map[string]int{}
+	other := 0
+	lastReport := time.Now()
 	scanner := bufio.NewScanner(port)
 	scanner.Buffer(make([]byte, 0, 4096), 64*1024)
-	lines := 0
 	for scanner.Scan() && globalSettings.M1421_Enabled {
 		line := strings.TrimSpace(scanner.Text())
-		if lines < 5 && len(line) > 0 {
-			lines++
-			if len(line) > 200 {
-				line = line[:200]
-			}
+		kind := m1421HandleLine(line)
+		counts[kind]++
+		// Log a few non-JSON lines (programmer status, command replies) to help diagnose the link.
+		// Lines that may carry key material are never logged.
+		if kind == "other" && other < 30 && len(line) > 0 && len(line) < 120 && !strings.Contains(line, "Key") && !m1421IsHex(line) {
+			other++
 			log.Printf("M1421 rx: %s\n", line)
 		}
-		m1421HandleLine(strings.TrimSpace(scanner.Text()))
+		if time.Since(lastReport) >= m1421KeepAlive {
+			lastReport = time.Now()
+			log.Printf("M1421 lines in last 30s: aircraft=%d uplink=%d badjson=%d other=%d\n",
+				counts["aircraft"], counts["uplink"], counts["bad"], counts["other"]+counts["json"])
+			counts = map[string]int{}
+		}
 	}
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && globalSettings.M1421_Enabled {
 		log.Printf("M1421 serial port error: %s\n", err.Error())
 	}
 }
 
-// m1421HandleLine processes one console line; command replies and anything that isn't JSON are ignored.
-func m1421HandleLine(line string) {
+func m1421IsHex(s string) bool {
+	if len(s) < 32 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
+			return false
+		}
+	}
+	return true
+}
+
+// m1421HandleLine processes one console line and returns what it was: "aircraft", "uplink", "json"
+// (other JSON), "bad" (malformed JSON) or "other" (command replies and anything that isn't JSON).
+func m1421HandleLine(line string) string {
 	if len(line) == 0 || line[0] != '{' {
-		return
+		return "other"
 	}
 	var m m1421Message
 	if err := json.Unmarshal([]byte(line), &m); err != nil {
-		log.Printf("M1421: bad JSON line: %s\n", err.Error())
-		return
+		return "bad"
 	}
 
 	if m.UATUplink != "" {
 		m1421HandleUplink(m.UATUplink)
+		return "uplink"
 	} else if m.Hex != "" {
 		m1421HandleAircraft(&m)
+		return "aircraft"
 	}
+	return "json"
 }
 
 func m1421HandleUplink(b64 string) {
@@ -217,11 +249,15 @@ func m1421HandleAircraft(m *m1421Message) {
 	}
 	icao := uint32(addr)
 	is978 := m.Link == "978"
+	msgClass := uint(MSGCLASS_ES)
 	if is978 {
 		globalStatus.UAT_messages_total++
+		msgClass = MSGCLASS_UAT
 	} else {
 		globalStatus.ES_messages_total++
 	}
+	// Feeds the per-minute message rate bars on the status page.
+	msgLogAppend(msg{MessageClass: msgClass, TimeReceived: stratuxClock.Time})
 
 	trafficMutex.Lock()
 	defer trafficMutex.Unlock()
